@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>S3 CORS Test</title>
+  </head>
+  <body>
+    <pre id="output">Loading...</pre>
+    <script>
+      fetch('http://localhost:4566/tracelogs?list-type=2', {
+        method: 'GET'
+        // No custom headers, unauthenticated GET for S3 list objects
+      })
+        .then(r => {
+          document.getElementById('output').textContent =
+            'Status: ' + r.status + '\n\n' +
+            'Headers:\n' + Array.from(r.headers).map(([k, v]) => k + ': ' + v).join('\n');
+          return r.text().then(txt => {
+            document.getElementById('output').textContent +=
+              '\n\nBody:\n' + txt;
+          });
+        })
+        .catch(e => {
+          document.getElementById('output').textContent = 'Error: ' + e;
+        });
+    </script>
+  </body>
+</html>

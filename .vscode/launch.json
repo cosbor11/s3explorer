@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/next",
+      "args": [
+        "-p",
+        "3001"
+      ],
+      "env": {
+        "NODE_OPTIONS": "--enable-source-maps"
+      },
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
+    }
+  ]
+}
