@@ -9,6 +9,7 @@ import ContextMenu from '@/components/ContextMenu'
 import EditorPane from '@/components/EditorPane'
 import FileTree from '@/components/FileTree'
 import ErrorBanner from '@/components/ErrorBanner'
+import LoadingOverlay from '@/components/LoadingOverlay'
 
 const VSCODE_BG = 'bg-[#1e1e1e]'
 const VSCODE_TEXT = 'text-[#d4d4d4]'
@@ -84,6 +85,7 @@ function MainArea() {
 export default function Page() {
   return (
     <S3Provider>
+      <LoadingOverlay /> 
       <div className={`h-screen flex ${VSCODE_BG} ${VSCODE_TEXT}`}>
         <Sidebar />
 

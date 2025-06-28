@@ -1,11 +1,17 @@
-// src/contexts/s3/index.tsx
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, MouseEvent } from 'react'
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+  MouseEvent,
+} from 'react'
 import { api, buildTree } from './api'
 import { resetEditor } from './editor'
 import * as menuHelpers from './menu'
-import {
+import type {
   S3Node,
   MenuType,
   MenuState,
@@ -20,6 +26,7 @@ export const useS3 = () => {
 }
 
 export const S3Provider = ({ children }: { children: ReactNode }) => {
+  /* ---------------- core state ---------------- */
   const [buckets, setBuckets] = useState<string[]>([])
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
   const [tree, setTree] = useState<S3Node[] | null>(null)
@@ -27,20 +34,18 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
   const [breadcrumb, setBreadcrumb] = useState<string[]>([])
   const [selectedFile, setSelectedFile] = useState<S3Node | null>(null)
 
+  /* editor */
   const [originalContent, setOriginalContent] = useState('')
   const [editedContent, setEditedContent] = useState('')
   const [isNewFile, setIsNewFile] = useState(false)
   const [newFilePrefix, setNewFilePrefix] = useState('')
   const [wrap, setWrap] = useState(false)
 
+  /* ui */
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refreshCurrent = () => {
-    if (selectedFile) openFile(selectedFile)
-    else openPrefix(currentPrefix)
-  }
-
+  /* menu */
   const [menu, setMenu] = useState<MenuState>({
     visible: false,
     x: 0,
@@ -58,7 +63,12 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
       setNewFilePrefix,
     })
 
-  // ---- API operations (using helpers) ----
+  /* ---------------- helpers ---------------- */
+  const confirmDiscard = () =>
+    !dirty ||
+    confirm('You have unsaved changes. Discard them and continue?')
+
+  /* ---------------- API ops ---------------- */
   const fetchBuckets = () => {
     setLoading(true)
     api<any>('/api/s3')
@@ -69,16 +79,21 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
 
   const openPrefix = (prefix: string) => {
     if (!selectedBucket) return
+    if (!confirmDiscard()) return
+
     setLoading(true)
     setError(null)
     setCurrentPrefix(prefix)
-    // ------- bugfix: do not clear tree or selectedFile before fetch! -------
 
-    api<any>(`/api/s3?bucket=${encodeURIComponent(selectedBucket)}&prefix=${encodeURIComponent(prefix)}`)
+    api<any>(
+      `/api/s3?bucket=${encodeURIComponent(
+        selectedBucket
+      )}&prefix=${encodeURIComponent(prefix)}`
+    )
       .then(d => {
         setTree(buildTree(prefix, d))
         setBreadcrumb(prefix ? prefix.replace(/\/$/, '').split('/') : [])
-        setSelectedFile(null) // clear selectedFile only after success
+        setSelectedFile(null)
         _resetEditor()
       })
       .catch(e => setError(e.message))
@@ -87,11 +102,13 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
 
   const openFile = (n: S3Node) => {
     if (!selectedBucket) return
-    setLoading(true)
-    // ------- bugfix: do not clear selectedFile before fetch! -------
+    if (!confirmDiscard()) return
 
+    setLoading(true)
     api<{ body: string }>(
-      `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&key=${encodeURIComponent(n.fullKey)}`
+      `/api/s3?bucket=${encodeURIComponent(
+        selectedBucket
+      )}&key=${encodeURIComponent(n.fullKey)}`
     )
       .then(d => {
         setSelectedFile(n)
@@ -104,35 +121,60 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
   }
 
   const startNewFile = (prefix: string) => {
+    if (!confirmDiscard()) return
     _resetEditor()
     setIsNewFile(true)
     setNewFilePrefix(prefix)
   }
 
-const saveFile = async (): Promise<boolean> => {
-  if (!selectedBucket) return false
-  try {
-    setLoading(true)
-    if (isNewFile) {
-      const name = prompt('File name?')
-      if (!name?.trim()) return false
-      await api('/api/s3', { /* …same as before… */ })
-      setIsNewFile(false)
-      // after creating, treat it like an opened file
-      setSelectedFile({ name, fullKey: `${newFilePrefix}${name}`, isDir: false })
-    } else if (selectedFile) {
-      await api('/api/s3', { /* …same as before… */ })
+  const saveFile = async (): Promise<boolean> => {
+    if (!selectedBucket) return false
+    try {
+      setLoading(true)
+      if (isNewFile) {
+        const name = prompt('File name?')
+        if (!name?.trim()) return false
+        await api('/api/s3', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bucket: selectedBucket,
+            folder: `${newFilePrefix}${name.trim()}`,
+            body: editedContent,
+          }),
+        })
+        setIsNewFile(false)
+        setSelectedFile({
+          name,
+          fullKey: `${newFilePrefix}${name}`,
+          isDir: false,
+        })
+      } else if (selectedFile) {
+        await api('/api/s3', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bucket: selectedBucket,
+            folder: selectedFile.fullKey,
+            body: editedContent,
+          }),
+        })
+      }
+      setOriginalContent(editedContent) // mark clean
+      return true
+    } catch (e: any) {
+      setError(e.message)
+      return false
+    } finally {
+      setLoading(false)
     }
-    // mark clean but keep file open
-    setOriginalContent(editedContent)
-    return true
-  } catch (e: any) {
-    setError(e.message)
-    return false
-  } finally {
-    setLoading(false)
   }
-}
+
+  /* ----- refresh current view (file or folder) ----- */
+  const refreshCurrent = () => {
+    if (selectedFile) openFile(selectedFile)
+    else openPrefix(currentPrefix)
+  }
 
   const createBucket = async () => {
     const name = prompt('Bucket name?')
@@ -192,7 +234,9 @@ const saveFile = async (): Promise<boolean> => {
     try {
       setLoading(true)
       await api(
-        `/api/s3?bucket=${encodeURIComponent(selectedBucket!)}&folder=${encodeURIComponent(n.fullKey)}`,
+        `/api/s3?bucket=${encodeURIComponent(
+          selectedBucket!
+        )}&folder=${encodeURIComponent(n.fullKey)}`,
         { method: 'DELETE' }
       )
       openPrefix(currentPrefix)
@@ -208,7 +252,9 @@ const saveFile = async (): Promise<boolean> => {
     try {
       setLoading(true)
       await api(
-        `/api/s3?bucket=${encodeURIComponent(selectedBucket!)}&key=${encodeURIComponent(n.fullKey)}`,
+        `/api/s3?bucket=${encodeURIComponent(
+          selectedBucket!
+        )}&key=${encodeURIComponent(n.fullKey)}`,
         { method: 'DELETE' }
       )
       openPrefix(currentPrefix)
@@ -219,13 +265,18 @@ const saveFile = async (): Promise<boolean> => {
     }
   }
 
-  // ---- menu helpers ----
-  const openMenu = (e: MouseEvent, type: MenuType, node?: S3Node, target?: string) =>
-    menuHelpers.openMenu(setMenu, e, type, node, target)
+  /* ---------------- menu helpers ---------------- */
+  const openMenu = (
+    e: MouseEvent,
+    type: MenuType,
+    node?: S3Node,
+    target?: string
+  ) => menuHelpers.openMenu(setMenu, e, type, node, target)
   const closeMenu = () => menuHelpers.closeMenu(setMenu)
 
-  // ---- selectBucket helper ----
+  /* ---------------- bucket helper ---------------- */
   const selectBucket = (b: string | null) => {
+    if (!confirmDiscard()) return
     setSelectedBucket(b)
     setBreadcrumb([])
     setCurrentPrefix('')
@@ -233,6 +284,18 @@ const saveFile = async (): Promise<boolean> => {
     setSelectedFile(null)
     _resetEditor()
   }
+
+  /* beforeunload guard */
+  useEffect(() => {
+    const h = (e: BeforeUnloadEvent) => {
+      if (dirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
 
   useEffect(() => {
     if (selectedBucket) openPrefix('')
@@ -271,7 +334,8 @@ const saveFile = async (): Promise<boolean> => {
     deleteFile,
     selectBucket,
     setError,
-    refreshCurrent, 
+    refreshCurrent,
+
     openMenu,
     closeMenu,
   }
