@@ -99,33 +99,6 @@ export default function BreadcrumbBar() {
             </svg>
           </button>
         </Tooltip>
-
-        {viewingFile && (
-          <>
-            <Tooltip label="Save (Ctrl-S)">
-              <button
-                className={`px-3 py-1 rounded border border-[#333] transition-colors ${
-                  dirty
-                    ? 'bg-[#313131] text-white hover:bg-[#3d3d3d]'
-                    : 'bg-[#232323] text-[#777] cursor-not-allowed'
-                }`}
-                disabled={!dirty}
-                onClick={saveFile}
-              >
-                Save
-              </button>
-            </Tooltip>
-
-            <Tooltip label={wrap ? 'Disable wrap' : 'Enable wrap'}>
-              <button
-                className="px-3 py-1 rounded border border-[#333] bg-[#232323] hover:bg-[#333] text-[#d4d4d4] transition-colors"
-                onClick={() => setWrap(!wrap)}
-              >
-                Wrap: {wrap ? 'On' : 'Off'}
-              </button>
-            </Tooltip>
-          </>
-        )}
       </div>
     </div>
   )
