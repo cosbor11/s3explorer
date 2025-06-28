@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useS3 } from '@/contexts/S3Context'
+import { useState } from 'react'
+import { useS3 } from '@/contexts/s3'
 import FileTree from '@/components/FileTree'
 
 const MIN_W = 160

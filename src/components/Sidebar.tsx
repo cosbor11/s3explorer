@@ -3,7 +3,7 @@
 
 import Image from 'next/image'
 import { useMemo, useState } from 'react'
-import { useS3 } from '@/contexts/S3Context'
+import { useS3 } from '@/contexts/s3'
 
 const MIN_W = 180
 const CHAR_PX = 8
@@ -16,6 +16,7 @@ export default function Sidebar() {
     createBucket,
     selectBucket,
     openMenu,
+    openPrefix,
   } = useS3()
 
   const longest = useMemo(() => Math.max(0, ...buckets.map(b => b.length)), [buckets])
@@ -26,7 +27,10 @@ export default function Sidebar() {
     const sx = e.clientX
     const sw = width
     const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, sw + (ev.clientX - sx)))
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
     window.addEventListener('mousemove', move)
     window.addEventListener('mouseup', up)
   }
@@ -38,7 +42,7 @@ export default function Sidebar() {
       (e.target as HTMLElement).closest('button[data-bucket]')
     ) return
     e.preventDefault()
-    openMenu(e, 'empty')
+    openMenu(e, 'emptySidebar')
   }
 
   return (
@@ -67,8 +71,8 @@ export default function Sidebar() {
             <circle cx="12" cy="12" r="10" stroke="#4ec9b0" strokeWidth="1.5" />
             <defs>
               <linearGradient id="gradPlus" x1="0" y1="0" x2="24" y2="24">
-                <stop offset="0%"  stopColor="#3794ff"/>
-                <stop offset="100%" stopColor="#4ec9b0"/>
+                <stop offset="0%" stopColor="#3794ff" />
+                <stop offset="100%" stopColor="#4ec9b0" />
               </linearGradient>
             </defs>
             <path
@@ -87,16 +91,21 @@ export default function Sidebar() {
           <li
             key={b}
             onContextMenu={e => {
-              selectBucket(b)
+              // right-click: just open context menu, DO NOT select
               openMenu(e, 'bucket', undefined, b)
             }}
           >
-            <button
-              data-bucket
-              className={`w-full text-left px-2 py-1 rounded hover:bg-[#313131] text-white ${
-                selectedBucket === b ? 'bg-[#232323] font-semibold' : ''
-              }`}
-              onClick={() => selectBucket(b)}
+            <button data-bucket
+              className={`w-full text-left px-2 py-1 rounded hover:bg-[#313131] text-white ${selectedBucket === b ? 'bg-[#232323] font-semibold' : ''}`}
+              onClick={() => {
+                if (selectedBucket === b) {
+                  /* bucket already active → just reload its root prefix */
+                  openPrefix('')
+                } else {
+                  /* switch buckets */
+                  selectBucket(b)
+                }
+              }}
             >
               {b}
             </button>
