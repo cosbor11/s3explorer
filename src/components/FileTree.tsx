@@ -2,7 +2,8 @@
 'use client'
 
 import { useCallback } from 'react'
-import { useS3, S3Node } from '@/contexts/s3'
+import { useS3 } from '@/contexts/s3'
+import { S3Node } from '@/contexts/s3/types'
 
 const BLUE  = 'text-[#3794ff]'
 const GREEN = 'text-[#4ec9b0]'

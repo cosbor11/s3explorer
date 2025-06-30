@@ -466,7 +466,6 @@ const uploadFiles = async (prefix: string, files: FileList) => {
     setEditedContent,
     saveFile,
     refreshCurrent,
-
     uploadFiles,
     downloadNode,
     renameNode,

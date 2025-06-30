@@ -32,7 +32,6 @@ export interface S3ContextState {
   breadcrumb: string[]
   currentPrefix: string
   selectedFile: S3Node | null
-  selectedNodes: S3Node[]
   originalContent: string
   editedContent: string
   isNewFile: boolean
@@ -52,22 +51,18 @@ export interface S3ContextState {
   setEditedContent(v: string): void
   saveFile(): Promise<boolean>
   refreshCurrent(): void
+  selectBucket(bucket:string | null): void
+  deleteFolder(n: S3Node): Promise<void>
+  deleteFile(n: S3Node): Promise<void>
 
   /* core file ops */
   uploadFiles(prefix: string, files: FileList): Promise<void>
   downloadNode(node: S3Node): void
   renameNode(node: S3Node, newName: string): Promise<void>
-  moveNodes(targetPrefix: string): Promise<void>
-  bulkDelete(nodes: S3Node[]): Promise<void>
 
   createBucket(): Promise<void>
   deleteBucket(b: string): Promise<void>
   createFolder(prefix: string): Promise<void>
-
-  /* selection helpers */
-  toggleSelect(node: S3Node, additive: boolean): void
-  clearSelection(): void
-
   /* menu */
   openMenu(e: MouseEvent, type: MenuType, node?: S3Node, target?: string): void
   closeMenu(): void

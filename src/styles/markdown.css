@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Apply Tailwind’s prose class for nice markdown styling */
+.markdown-content {
+  @apply prose prose-invert max-w-none;
+}
