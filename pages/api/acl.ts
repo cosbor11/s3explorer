@@ -1,7 +1,6 @@
 // pages/api/acl.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
 import {
-  S3Client,
   GetObjectAclCommand,
   GetBucketAclCommand,
   PutObjectAclCommand,
@@ -9,19 +8,20 @@ import {
   Grant,
   Grantee,
 } from '@aws-sdk/client-s3'
-
-const s3 = new S3Client({
-  region: 'us-east-1',
-  endpoint: 'http://localhost:4566',
-  credentials: { accessKeyId: 'testuser', secretAccessKey: 'testsecret' },
-  forcePathStyle: true,
-})
+import { getS3Client } from '@/clients/s3'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { bucket, key } = req.method === 'GET' ? req.query : req.body
 
   if (!bucket) {
     return res.status(400).json({ ok: false, error: { message: 'Missing bucket' } })
+  }
+
+  let s3
+  try {
+    s3 = getS3Client(req)
+  } catch (e: any) {
+    return res.status(400).json({ ok: false, error: { message: e.message } })
   }
 
   try {
@@ -37,32 +37,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'PUT') {
       const { grants, canned, owner } = req.body
 
-      console.log('PUT ACL request:', {
-        bucket,
-        key,
-        canned,
-        grants,
-        owner,
-      })
-
-      // use canned ACL
       if (canned) {
-        const input = {
-          Bucket: bucket,
-          ACL: canned,
-          ...(key && { Key: key }),
-        }
-
         const command = key
-          ? new PutObjectAclCommand(input)
-          : new PutBucketAclCommand(input)
-
-        console.log('Sending canned ACL command:', command)
+          ? new PutObjectAclCommand({ Bucket: bucket, Key: key, ACL: canned })
+          : new PutBucketAclCommand({ Bucket: bucket, ACL: canned })
         await s3.send(command)
         return res.status(200).json({ ok: true })
       }
 
-      // custom grants: disallow empty
       if (!Array.isArray(grants) || grants.length === 0) {
         return res.status(400).json({
           ok: false,
@@ -78,48 +60,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const inputGrants: Grant[] = grants.map((g: any): Grant => {
-        const grantee: Grantee = {
-          Type: g.Grantee.Type,
-        }
+        const grantee: Grantee = { Type: g.Grantee.Type }
+        if (g.Grantee.Type === 'Group' && g.Grantee.URI) grantee.URI = g.Grantee.URI
+        if (g.Grantee.Type === 'CanonicalUser' && g.Grantee.ID) grantee.ID = g.Grantee.ID
+        if (g.Grantee.DisplayName) grantee.DisplayName = g.Grantee.DisplayName
 
-        if (g.Grantee.Type === 'Group' && g.Grantee.URI) {
-          grantee.URI = g.Grantee.URI
-        }
-
-        if (g.Grantee.Type === 'CanonicalUser' && g.Grantee.ID) {
-          grantee.ID = g.Grantee.ID
-        }
-
-        if (g.Grantee.DisplayName) {
-          grantee.DisplayName = g.Grantee.DisplayName
-        }
-
-        return {
-          Grantee: grantee,
-          Permission: g.Permission,
-        }
+        return { Grantee: grantee, Permission: g.Permission }
       })
-
-      const accessControlPolicy = {
-        Grants: inputGrants,
-        Owner: {
-          ID: owner.ID,
-          ...(owner.DisplayName ? { DisplayName: owner.DisplayName } : {}),
-        },
-      }
 
       const command = key
         ? new PutObjectAclCommand({
             Bucket: bucket,
             Key: key,
-            AccessControlPolicy: accessControlPolicy,
+            AccessControlPolicy: { Grants: inputGrants, Owner: owner },
           })
         : new PutBucketAclCommand({
             Bucket: bucket,
-            AccessControlPolicy: accessControlPolicy,
+            AccessControlPolicy: { Grants: inputGrants, Owner: owner },
           })
-
-      console.log('Sending custom ACL command:', JSON.stringify(command.input, null, 2))
 
       await s3.send(command)
       return res.status(200).json({ ok: true })

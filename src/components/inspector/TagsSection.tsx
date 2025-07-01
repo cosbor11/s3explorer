@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { Pencil, Trash2, Save, Check } from 'lucide-react'
 import { Loader2 } from 'lucide-react'
+import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
 
 export default function TagsSection() {
   const { selectedBucket, selectedFile } = useS3()
@@ -14,6 +15,7 @@ export default function TagsSection() {
   const [saving, setSaving] = useState(false)
   const [editIndex, setEditIndex] = useState<number | null>(null)
   const [savedMessage, setSavedMessage] = useState(false)
+  const fetchData = useAuthenticatedFetch()
 
   useEffect(() => {
     if (!selectedBucket) return
@@ -26,8 +28,7 @@ export default function TagsSection() {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(url)
-        const json = await res.json()
+        const json = await fetchData(url)
         if (!json.ok) {
           if (json.error?.message?.includes('TagSet does not exist')) {
             setTags([])
@@ -86,12 +87,11 @@ export default function TagsSection() {
     setError(null)
     try {
       const cleaned = next.filter(tag => tag.Key.trim() !== '')
-      const res = await fetch('/api/tags', {
+      const json = await fetchData('/api/tags', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, key: selectedFile?.fullKey, tags: cleaned }),
       })
-      const json = await res.json()
       if (!json.ok) throw new Error(json.error?.message ?? 'Failed to save tags')
       setSavedMessage(true)
       setTimeout(() => setSavedMessage(false), 2000)

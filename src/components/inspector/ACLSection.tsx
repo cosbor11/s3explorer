@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { Save, Info, Plus, Trash2, Check } from 'lucide-react'
+import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
 
 const CANNED_ACLS = ['private', 'public-read', 'public-read-write', 'authenticated-read']
 const PERMISSIONS = ['FULL_CONTROL', 'WRITE', 'WRITE_ACP', 'READ', 'READ_ACP']
@@ -88,6 +89,8 @@ export default function ACLSection() {
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [initialJsonText, setInitialJsonText] = useState<string>('')
 
+  const fetchData = useAuthenticatedFetch()
+
   const skipSyncRef = useRef(false)
 
   useEffect(() => {
@@ -101,8 +104,7 @@ export default function ACLSection() {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(url)
-        const json = await res.json()
+        const json = await fetchData(url)
         if (!json.ok) throw new Error(json.error?.message ?? 'Failed to load ACL')
         const raw = getAclJson(json.data.Owner, json.data.Grants)
         setOwner(json.data.Owner || null)

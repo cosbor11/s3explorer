@@ -11,17 +11,11 @@ import {
   DeleteObjectCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3'
+import { getS3Client } from '@/clients/s3'
 
-const s3 = new S3Client({
-  region: 'us-east-1',
-  endpoint: 'http://localhost:4566',
-  credentials: { accessKeyId: 'testuser', secretAccessKey: 'testsecret' },
-  forcePathStyle: true,
-})
 
 /* ───────── helpers ───────── */
 const ok = (res: NextApiResponse, data: any = null, code = 200) => {
-  // log ok responses
   console.log('api/s3 ok:', { code, data: typeof data === 'object' && data !== null ? Object.keys(data) : data })
   return res.status(code).json({ ok: true, data })
 }
@@ -32,43 +26,36 @@ const fail = (
   code: string,
   http = 400
 ) => {
-  // log fail responses
   console.error('api/s3 fail:', { code, message, http })
   return res.status(http).json({ ok: false, error: { code, message } })
 }
 
 /* ───────── handler ───────── */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   console.log('api/s3 handler:', req.method, { query: req.query, body: req.body })
   try {
-    /* ---------- GET ---------- */
+    const s3 = getS3Client(req)
+
     if (req.method === 'GET') {
       const { bucket, prefix, key } = req.query
       console.log('api/s3 GET', { bucket, prefix, key })
 
       if (key && bucket) {
-        console.log('GetObjectCommand', { Bucket: String(bucket), Key: String(key) })
         const obj = await s3.send(
           new GetObjectCommand({ Bucket: String(bucket), Key: String(key) })
         )
 
-        /* base64?  → used by image preview */
         if (req.query.base64 === '1') {
           const bytes = await (obj.Body as any).transformToByteArray()
           const base64 = Buffer.from(bytes).toString('base64')
           return ok(res, { base64 })
         }
 
-        /* default text body */
         const body = await (obj.Body as any).transformToString()
         return ok(res, { body })
       }
 
       if (bucket) {
-        console.log('ListObjectsV2Command', { Bucket: String(bucket), Prefix: prefix, Delimiter: '/' })
         const objs = await s3.send(
           new ListObjectsV2Command({
             Bucket: String(bucket),
@@ -79,26 +66,17 @@ export default async function handler(
         return ok(res, objs)
       }
 
-      console.log('ListBucketsCommand')
       const bs = await s3.send(new ListBucketsCommand({}))
       return ok(res, bs)
     }
 
-    /* ---------- POST ---------- */
     if (req.method === 'POST') {
       const { bucket, folder, body } = req.body
-      console.log('api/s3 POST', { bucket, folder })
-
       if (bucket && !folder) {
         try {
-          console.log('HeadBucketCommand', { Bucket: bucket })
           await s3.send(new HeadBucketCommand({ Bucket: bucket }))
-        } catch {
-          /* does not exist */
-        }
-
+        } catch {}
         try {
-          console.log('CreateBucketCommand', { Bucket: bucket })
           await s3.send(new CreateBucketCommand({ Bucket: bucket }))
           return ok(res, { message: `Bucket "${bucket}" created` })
         } catch (e: any) {
@@ -114,10 +92,9 @@ export default async function handler(
         const payload = isFolder
           ? ''
           : req.body.isBase64
-            ? Buffer.from(req.body.body, 'base64')   // decode binary
-            : req.body.body                          // plain text
+            ? Buffer.from(req.body.body, 'base64')
+            : req.body.body
 
-        console.log('PutObjectCommand', { Bucket: bucket, Key: key, isFolder, isBase64: req.body.isBase64 })
         await s3.send(
           new PutObjectCommand({
             Bucket: bucket,
@@ -135,14 +112,11 @@ export default async function handler(
       return fail(res, 'Missing bucket or folder parameter', 'BadRequest', 400)
     }
 
-    /* ---------- DELETE ---------- */
     if (req.method === 'DELETE') {
       const { bucket, folder, key } = req.query
-      console.log('api/s3 DELETE', { bucket, folder, key })
 
       if (bucket && !folder && !key) {
         try {
-          console.log('DeleteBucketCommand', { Bucket: String(bucket) })
           await s3.send(new DeleteBucketCommand({ Bucket: String(bucket) }))
           return ok(res, { message: `Bucket "${bucket}" deleted` })
         } catch (e: any) {
@@ -152,7 +126,6 @@ export default async function handler(
 
       if (bucket && folder) {
         const pref = String(folder).endsWith('/') ? String(folder) : `${folder}/`
-        console.log('ListObjectsV2Command for folder delete', { Bucket: String(bucket), Prefix: pref })
         const objs = await s3.send(
           new ListObjectsV2Command({
             Bucket: String(bucket),
@@ -162,7 +135,6 @@ export default async function handler(
         if (objs.Contents?.length) {
           for (const o of objs.Contents) {
             if (o.Key) {
-              console.log('DeleteObjectCommand for folder item', { Bucket: String(bucket), Key: o.Key })
               await s3.send(
                 new DeleteObjectCommand({
                   Bucket: String(bucket),
@@ -176,7 +148,6 @@ export default async function handler(
       }
 
       if (bucket && key) {
-        console.log('DeleteObjectCommand for file', { Bucket: String(bucket), Key: String(key) })
         await s3.send(
           new DeleteObjectCommand({
             Bucket: String(bucket),

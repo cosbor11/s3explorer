@@ -4,7 +4,6 @@
 import { useState } from 'react'
 import Tooltip from './Tooltip'
 import { useS3Connection } from '@/contexts/S3ConnectionContext'
-import { S3Connection } from '@/contexts/S3ConnectionContext'
 import S3ConnectionManagerDialog from './S3ConnectionManagerDialog'
 
 export default function S3ConnectionDropdown() {
@@ -21,7 +20,7 @@ export default function S3ConnectionDropdown() {
       <Tooltip label="Select S3 connection">
         <div className="flex items-center gap-2">
           <select
-            className="bg-[#232323] border border-[#333] text-sm text-white px-2 py-1 rounded"
+            className="bg-[#232323] border border-[#333] text-sm text-white px-2 py-1 rounded cursor-pointer hover:bg-[#2a2a2a]"
             value={selected?.id ?? ''}
             onChange={(e) => {
               if (e.target.value === '__manage') {

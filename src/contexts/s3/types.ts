@@ -51,18 +51,19 @@ export interface S3ContextState {
   setEditedContent(v: string): void
   saveFile(): Promise<boolean>
   refreshCurrent(): void
-  selectBucket(bucket:string | null): void
+  selectBucket(bucket: string | null): void
   deleteFolder(n: S3Node): Promise<void>
   deleteFile(n: S3Node): Promise<void>
+  setTree(tree: S3Node[]): void
 
   /* core file ops */
   uploadFiles(prefix: string, files: FileList): Promise<void>
   downloadNode(node: S3Node): void
   renameNode(node: S3Node, newName: string): Promise<void>
-
   createBucket(): Promise<void>
   deleteBucket(b: string): Promise<void>
   createFolder(prefix: string): Promise<void>
+
   /* menu */
   openMenu(e: MouseEvent, type: MenuType, node?: S3Node, target?: string): void
   closeMenu(): void

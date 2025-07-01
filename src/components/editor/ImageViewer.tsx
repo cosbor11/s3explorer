@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
+import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'] as const
 
@@ -10,19 +11,20 @@ export default function ImageViewer() {
   const { selectedFile, selectedBucket } = useS3()
   const [src, setSrc] = useState<string | null>(null)
 
+  const fetchData = useAuthenticatedFetch()
+
   if (!selectedFile || !selectedBucket) return null
   const ext = selectedFile.name.split('.').pop()?.toLowerCase()
   if (!ext || !IMAGE_EXT.includes(ext as any)) return null
 
   useEffect(() => {
     const load = async () => {
-      const r = await fetch(
+      const json = await fetchData(
         `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&key=${encodeURIComponent(
           selectedFile.fullKey
         )}&base64=1`
       )
-      const j = await r.json()
-      const b64 = j.data?.base64 ?? j.base64
+      const b64 = json.data?.base64 ?? j.base64
       if (!b64) return
       const mime =
         ext === 'svg' ? 'image/svg+xml' : `image/${ext === 'jpg' ? 'jpeg' : ext}`

@@ -1,16 +1,15 @@
 // pages/api/test.ts
-import { S3Client, ListBucketsCommand } from '@aws-sdk/client-s3';
+import { getS3Client } from '@/clients/s3';
+import {Bucket, ListBucketsCommand } from '@aws-sdk/client-s3';
+import { NextApiRequest } from 'next';
 
-export default async function handler(req, res) {
-  const s3 = new S3Client({
-    region: 'us-east-1',
-    endpoint: 'http://localhost:4566',
-    credentials: {
-      accessKeyId: 'testuser',
-      secretAccessKey: 'testsecret',
-    },
-    forcePathStyle: true,
-  });
+export default async function handler(req: NextApiRequest, res: { status: (arg0: number) => { (): any; new(): any; json: { (arg0: Bucket[] | undefined): void; new(): any; }; }; }) {
+  let s3
+  try {
+    s3 = getS3Client(req)
+  } catch (e: any) {
+    return res.status(400).json({ ok: false, error: { message: e.message } })
+  }
   try {
     const data = await s3.send(new ListBucketsCommand({}));
     res.status(200).json(data.Buckets);

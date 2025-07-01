@@ -1,11 +1,17 @@
 // src/components/S3ConnectionForm.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useS3Connection, S3Connection } from '@/contexts/S3ConnectionContext'
 import { presets } from '@/components/connection/presets'
 import { generateUniqueName, testConnection } from '@/components/connection/utils'
 import { nanoid } from 'nanoid'
+
+const REGIONS = [
+  'us-east-1', 'us-west-1', 'us-west-2',
+  'eu-west-1', 'eu-central-1', 'ap-southeast-1',
+  'ap-southeast-2', 'ap-northeast-1', 'sa-east-1',
+]
 
 export default function S3ConnectionForm({
   editing,
@@ -19,7 +25,6 @@ export default function S3ConnectionForm({
   onCancel: () => void
 }) {
   const { connections } = useS3Connection()
-
   const [form, setForm] = useState<S3Connection>(
     editing || {
       id: '',
@@ -34,6 +39,21 @@ export default function S3ConnectionForm({
 
   const [selectedPreset, setSelectedPreset] = useState('')
   const [testStatus, setTestStatus] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  useEffect(() => {
+    setForm(
+      editing || {
+        id: '',
+        name: '',
+        endpoint: '',
+        region: '',
+        accessKeyId: '',
+        secretAccessKey: '',
+        sessionToken: '',
+      }
+    )
+  }, [editing])
 
   useEffect(() => {
     if (selectedPreset) {
@@ -53,25 +73,32 @@ export default function S3ConnectionForm({
   }
 
   const handleSave = () => {
+    setSaveStatus('saving')
     const final = { ...form, id: form.id || nanoid() }
     onSave(final)
+    setSaveStatus('saved')
+    setTimeout(() => setSaveStatus('idle'), 2000)
   }
 
   const handleTest = async () => {
     setTestStatus('Testing...')
     try {
       const err = await testConnection(form)
-      if (err) {
-        setTestStatus(`Error: ${err}`)
-      } else {
-        setTestStatus('Success')
-      }
+      setTestStatus(err ? `Error: ${err}` : 'Success')
     } catch (e: any) {
       setTestStatus(`Error: ${e?.message || 'Unknown error'} (${e?.name || 'NoName'})`)
     }
   }
 
+  const handleDelete = () => {
+    const confirmed = window.confirm(`Are you sure you want to delete "${form.name}"?`)
+    if (confirmed) {
+      onDelete(form.id)
+    }
+  }
+
   const activePreset = presets.find((p) => p.label === selectedPreset)
+  const needsSessionToken = activePreset?.values.sessionToken !== undefined
 
   return (
     <div className="flex flex-col gap-4 text-white">
@@ -82,7 +109,7 @@ export default function S3ConnectionForm({
           value={selectedPreset}
           onChange={(e) => setSelectedPreset(e.target.value)}
         >
-          <option value="">Custom</option>
+          <option value="">Select preset</option>
           {presets.map((preset) => (
             <option key={preset.label} value={preset.label}>
               {preset.label}
@@ -97,24 +124,31 @@ export default function S3ConnectionForm({
         )}
       </div>
 
+      <div>
+        <label className="block text-sm mb-1">Name</label>
+        <input
+          className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
+          value={form.name}
+          onChange={(e) => onChange('name', e.target.value)}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm mb-1">Name</label>
-          <input
-            className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
-            value={form.name}
-            onChange={(e) => onChange('name', e.target.value)}
-          />
-        </div>
-        <div>
           <label className="block text-sm mb-1">Region</label>
-          <input
+          <select
             className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
             value={form.region}
             onChange={(e) => onChange('region', e.target.value)}
-          />
+          >
+            {REGIONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
         </div>
-        <div className="col-span-2">
+        <div>
           <label className="block text-sm mb-1">Endpoint</label>
           <input
             className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
@@ -138,45 +172,79 @@ export default function S3ConnectionForm({
             onChange={(e) => onChange('secretAccessKey', e.target.value)}
           />
         </div>
-        <div className="col-span-2">
-          <label className="block text-sm mb-1">Session Token (optional)</label>
-          <input
-            className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
-            value={form.sessionToken}
-            onChange={(e) => onChange('sessionToken', e.target.value)}
-          />
-        </div>
+
+        {needsSessionToken && (
+          <div className="col-span-2">
+            <label className="block text-sm mb-1">Session Token</label>
+            <input
+              className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
+              value={form.sessionToken}
+              onChange={(e) => onChange('sessionToken', e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-3 pt-2">
         <button
           onClick={handleTest}
-          className="bg-[#333] border border-[#555] px-4 py-1 rounded hover:bg-[#444]"
+          className="cursor-pointer bg-[#333] border border-[#555] px-4 py-1 rounded hover:bg-[#444]"
         >
           Test Connection
         </button>
         <div className="flex-1" />
         <button
           onClick={onCancel}
-          className="border border-[#555] text-gray-300 hover:text-white px-4 py-1 rounded"
+          className="cursor-pointer border border-[#555] text-gray-300 hover:text-white px-4 py-1 rounded"
         >
           Cancel
         </button>
         {editing && (
           <button
-            onClick={() => onDelete(form.id)}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 rounded"
+            onClick={handleDelete}
+            className="cursor-pointer bg-red-600 hover:bg-red-700 text-white px-4 py-1 rounded"
           >
             Delete
           </button>
         )}
         <button
           onClick={handleSave}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded"
+          className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded flex items-center gap-2"
         >
+          {saveStatus === 'saving' && (
+            <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+                fill="none"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+          )}
           Save
         </button>
       </div>
+
+      {saveStatus === 'saved' && (
+        <div className="text-green-500 text-sm flex items-center gap-1 mt-2">
+          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 00-1.414 0L9 11.586 6.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l7-7a1 1 0 000-1.414z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Saved
+        </div>
+      )}
 
       {testStatus && (
         <div className="text-xs text-gray-400 bg-[#1a1a1a] border border-[#333] rounded p-2 mt-2 max-h-24 overflow-auto whitespace-pre-wrap">

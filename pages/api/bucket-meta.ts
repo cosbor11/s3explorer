@@ -1,23 +1,21 @@
+// pages/api/bucket-info.ts
 import { NextApiRequest, NextApiResponse } from 'next'
 import {
-  S3Client,
   GetBucketLocationCommand,
   GetBucketVersioningCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
-
-const s3 = new S3Client({
-  region: 'us-east-1',
-  endpoint: 'http://localhost:4566',
-  credentials: { accessKeyId: 'testuser', secretAccessKey: 'testsecret' },
-  forcePathStyle: true,
-})
+import { getS3Client } from '@/clients/s3'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { bucket } = req.query
-  if (!bucket) return res.status(400).json({ ok: false, error: { message: 'Missing bucket' } })
+  if (!bucket) {
+    return res.status(400).json({ ok: false, error: { message: 'Missing bucket' } })
+  }
 
   try {
+    const s3 = getS3Client(req)
+
     const [loc, versioning, list] = await Promise.all([
       s3.send(new GetBucketLocationCommand({ Bucket: String(bucket) })),
       s3.send(new GetBucketVersioningCommand({ Bucket: String(bucket) })),
@@ -41,6 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     })
   } catch (e: any) {
+    console.error('bucket-info error:', e)
     return res.status(500).json({ ok: false, error: { message: e.message } })
   }
 }

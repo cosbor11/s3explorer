@@ -471,7 +471,7 @@ const uploadFiles = async (prefix: string, files: FileList) => {
     renameNode,
     deleteFolder,
     deleteFile,
-
+    setTree,
     createBucket,
     deleteBucket,
     createFolder,

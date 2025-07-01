@@ -22,11 +22,13 @@ const S3ConnectionContext = createContext<{
   updateConnection: (conn: S3Connection) => void
   addConnection: (conn: S3Connection) => void
   removeConnection: (id: string) => void
+  ready: boolean
 }>({} as any)
 
 export function S3ConnectionProvider({ children }: { children: React.ReactNode }) {
   const [connections, setConnections] = useState<S3Connection[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -38,6 +40,7 @@ export function S3ConnectionProvider({ children }: { children: React.ReactNode }
         setSelectedId(selected)
       }
     }
+    setReady(true)
   }, [])
 
   useEffect(() => {
@@ -49,6 +52,20 @@ export function S3ConnectionProvider({ children }: { children: React.ReactNode }
       localStorage.setItem(SELECTED_ID_KEY, selectedId)
     }
   }, [selectedId])
+
+  const selected = connections.find((c) => c.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (selected) {
+      const token = JSON.stringify({
+        accessKeyId: selected.accessKeyId,
+        secretAccessKey: selected.secretAccessKey,
+        region: selected.region,
+        endpoint: selected.endpoint,
+      })
+      sessionStorage.setItem('s3-session-token', token)
+    }
+  }, [selected])
 
   const setSelectedById = (id: string) => setSelectedId(id)
 
@@ -68,8 +85,6 @@ export function S3ConnectionProvider({ children }: { children: React.ReactNode }
     if (selectedId === id) setSelectedId(null)
   }
 
-  const selected = connections.find((c) => c.id === selectedId) ?? null
-
   return (
     <S3ConnectionContext.Provider
       value={{
@@ -79,6 +94,7 @@ export function S3ConnectionProvider({ children }: { children: React.ReactNode }
         updateConnection,
         addConnection,
         removeConnection,
+        ready,
       }}
     >
       {children}

@@ -1,5 +1,4 @@
 // src/components/connection/utils.ts
-import { S3Client, ListBucketsCommand } from '@aws-sdk/client-s3'
 import { S3Connection } from '@/contexts/S3ConnectionContext'
 
 export function generateUniqueName(base: string, existing: S3Connection[]): string {
@@ -12,18 +11,27 @@ export function generateUniqueName(base: string, existing: S3Connection[]): stri
 
 export async function testConnection(conn: S3Connection): Promise<string | null> {
   try {
-    const client = new S3Client({
-      endpoint: conn.endpoint,
-      region: conn.region,
-      credentials: {
-        accessKeyId: conn.accessKeyId,
-        secretAccessKey: conn.secretAccessKey,
+    const res = await fetch('/api/test-s3-connection', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      forcePathStyle: true,
+      body: JSON.stringify({
+        endpoint: conn.endpoint,
+        region: conn.region,
+        accessKeyId: conn.accessKeyId?.trim(),
+        secretAccessKey: conn.secretAccessKey?.trim()
+      }),
     })
-    await client.send(new ListBucketsCommand({}))
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      return data?.error || 'Unknown error'
+    }
+
     return null
   } catch (err: any) {
-    return err.message || 'Unknown error'
+    return err?.message || 'Failed to reach test API'
   }
 }

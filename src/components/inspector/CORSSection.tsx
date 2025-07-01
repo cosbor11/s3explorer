@@ -13,6 +13,7 @@ import {
   Lock,
   Loader2,
 } from 'lucide-react'
+import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
 
 const PRESETS = [
   {
@@ -96,6 +97,7 @@ export default function PolicySection() {
   const [awsValidationMsg, setAwsValidationMsg] = useState<string | null>(null)
   const [awsValidated, setAwsValidated] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
+  const fetchData = useAuthenticatedFetch()
 
   const presetRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -121,8 +123,7 @@ export default function PolicySection() {
     setAwsValidated(false)
     setJustSaved(false)
 
-    fetch(`/api/policy?bucket=${encodeURIComponent(selectedBucket)}`)
-      .then(res => res.json())
+    fetchData(`/api/policy?bucket=${encodeURIComponent(selectedBucket)}`)
       .then(json => {
         if (!json.ok) throw new Error(json.error?.message ?? 'Failed to load policy')
         const str = JSON.stringify(json.data.Policy, null, 2)
@@ -176,12 +177,11 @@ export default function PolicySection() {
       return false
     }
     try {
-      const resp = await fetch('/api/policy-validate', {
+      const json = await fetchData('/api/policy-validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, policy: JSON.parse(policy) }),
       })
-      const json = await resp.json()
       if (!json.ok) {
         setAwsValidationMsg(json.error?.message || 'AWS validation failed')
         setAwsValidated(false)
@@ -204,7 +204,7 @@ export default function PolicySection() {
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch('/api/policy', {
+      const res = await fetchData('/api/policy', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, policy: JSON.parse(policy) }),

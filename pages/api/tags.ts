@@ -7,13 +7,8 @@ import {
   PutBucketTaggingCommand,
   Tag
 } from '@aws-sdk/client-s3'
+import { getS3Client } from '@/clients/s3'
 
-const s3 = new S3Client({
-  region: 'us-east-1',
-  endpoint: 'http://localhost:4566',
-  credentials: { accessKeyId: 'testuser', secretAccessKey: 'testsecret' },
-  forcePathStyle: true,
-})
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { method } = req
@@ -21,6 +16,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (method === 'GET') {
     const { bucket, key } = req.query
     if (!bucket) return res.status(400).json({ ok: false, error: { message: 'Missing bucket' } })
+
+    let s3
+    try {
+      s3 = getS3Client(req)
+    } catch (e: any) {
+      return res.status(400).json({ ok: false, error: { message: e.message } })
+    }
 
     try {
       const cmd = key

@@ -4,6 +4,7 @@ import {
   S3Client,
   PutBucketCorsCommand,
 } from '@aws-sdk/client-s3'
+import { getS3Client } from '@/clients/s3'
 
 function isLikelyLocalStackError(e: any): boolean {
   if (!e || typeof e !== 'object' || !e.message) return false
@@ -24,13 +25,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!bucket) return res.status(400).json({ ok: false, error: { message: 'Missing bucket' } })
   if (!cors) return res.status(400).json({ ok: false, error: { message: 'Missing cors' } })
 
-  // Endpoint/config must remain until centralized utility is used
-  const s3 = new S3Client({
-    region: 'us-east-1',
-    endpoint: 'http://localhost:4566',
-    credentials: { accessKeyId: 'testuser', secretAccessKey: 'testsecret' },
-    forcePathStyle: true,
-  })
+  let s3
+    try {
+      s3 = getS3Client(req)
+    } catch (e: any) {
+      return res.status(400).json({ ok: false, error: { message: e.message } })
+    }
+  
 
   try {
     await s3.send(new PutBucketCorsCommand({

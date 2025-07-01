@@ -1,17 +1,19 @@
 // src/components/FileTree.tsx
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { S3Node } from '@/contexts/s3/types'
+import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
 
-const BLUE  = 'text-[#3794ff]'
+const BLUE = 'text-[#3794ff]'
 const GREEN = 'text-[#4ec9b0]'
-const TEXT  = 'text-[#d4d4d4]'
+const TEXT = 'text-[#d4d4d4]'
 
 export default function FileTree() {
   const {
     tree,
+    setTree,
     openPrefix,
     openFile,
     openMenu,
@@ -20,11 +22,29 @@ export default function FileTree() {
     selectedFile,
   } = useS3()
 
+  const fetchData = useAuthenticatedFetch()
+
+  useEffect(() => {
+    const loadTree = async () => {
+      const res = await fetchData('/api/s3')
+      if (res.ok) {
+        // Ensure every item has a unique key
+        const nodes = res.data?.Buckets?.map((b: any) => ({
+          name: b.Name,
+          fullKey: b.Name,
+          isDir: true,
+        })) || []
+        setTree(nodes)
+      }
+    }
+
+    loadTree()
+  }, [fetchData, setTree])
+
   if (!tree) return null
 
   const isActive = (n: S3Node) => selectedFile?.fullKey === n.fullKey
 
-  /* drag-drop upload */
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
@@ -44,7 +64,7 @@ export default function FileTree() {
     >
       <ul>
         {tree.map((n) => (
-          <li key={n.fullKey}>
+          <li key={n.fullKey || n.name}>
             <div
               className={`
                 flex items-center gap-1 px-2 py-0.5 cursor-pointer select-none rounded
@@ -53,7 +73,7 @@ export default function FileTree() {
               onClick={() => (n.isDir ? openPrefix(n.fullKey) : openFile(n))}
               onContextMenu={(e) => {
                 e.preventDefault()
-                e.stopPropagation() /* keep sidebar’s menu from firing */
+                e.stopPropagation()
                 openMenu(e, n.isDir ? 'folder' : 'file', n)
               }}
             >

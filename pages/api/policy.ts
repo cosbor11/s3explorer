@@ -5,13 +5,7 @@ import {
   GetBucketPolicyCommand,
   PutBucketPolicyCommand,
 } from '@aws-sdk/client-s3'
-
-const s3 = new S3Client({
-  region: 'us-east-1',
-  endpoint: 'http://localhost:4566',
-  credentials: { accessKeyId: 'testuser', secretAccessKey: 'testsecret' },
-  forcePathStyle: true,
-})
+import { getS3Client } from '@/clients/s3'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { bucket } = req.method === 'GET' ? req.query : req.body
@@ -19,6 +13,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!bucket) {
     return res.status(400).json({ ok: false, error: { message: 'Missing bucket' } })
   }
+
+  let s3
+    try {
+      s3 = getS3Client(req)
+    } catch (e: any) {
+      return res.status(400).json({ ok: false, error: { message: e.message } })
+    }
 
   try {
     if (req.method === 'GET') {
