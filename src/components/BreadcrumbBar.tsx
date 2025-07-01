@@ -3,6 +3,7 @@
 
 import Tooltip from '@/components/Tooltip'
 import { useS3 } from '@/contexts/s3'
+import S3ConnectionDropdown from './S3ConnectionDropdown'
 
 const VSCODE_BORDER = 'border-[#2d2d2d]'
 const linkCls =
@@ -26,7 +27,6 @@ export default function BreadcrumbBar() {
 
   const viewingFile = isNewFile || selectedFile
 
-  /* ----- handlers ----- */
   const onRefresh = () => {
     if (dirty && viewingFile) {
       const discard = confirm(
@@ -48,17 +48,15 @@ export default function BreadcrumbBar() {
         </button>
 
         {selectedBucket && (
-          <>
-            <button
-              className={`${linkCls} font-semibold ml-0.5`}
-              onClick={() => {
-                selectBucket(selectedBucket)
-                openPrefix('')
-              }}
-            >
-              {selectedBucket}
-            </button>
-          </>
+          <button
+            className={`${linkCls} font-semibold ml-0.5`}
+            onClick={() => {
+              selectBucket(selectedBucket)
+              openPrefix('')
+            }}
+          >
+            {selectedBucket}
+          </button>
         )}
 
         {breadcrumb.map((seg, i) => (
@@ -85,7 +83,7 @@ export default function BreadcrumbBar() {
 
       {/* right-side actions */}
       <div className="flex items-center gap-3">
-        {/* refresh (always visible) */}
+        {/* refresh */}
         <Tooltip label="Refresh">
           <button
             onClick={onRefresh}
@@ -99,6 +97,9 @@ export default function BreadcrumbBar() {
             </svg>
           </button>
         </Tooltip>
+
+        {/* s3 connection dropdown */}
+        <S3ConnectionDropdown />
       </div>
     </div>
   )

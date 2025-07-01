@@ -2,6 +2,7 @@
 'use client'
 
 import { useS3, S3Provider } from '@/contexts/s3'
+import { S3ConnectionProvider } from '@/contexts/S3ConnectionContext'
 import Sidebar from '@/components/Sidebar'
 import BreadcrumbBar from '@/components/BreadcrumbBar'
 import ContextMenu from '@/components/ContextMenu'
@@ -43,6 +44,7 @@ function MainArea() {
 
 export default function Page() {
   return (
+    <S3ConnectionProvider>
     <S3Provider>
       <LoadingOverlay />
       <div className={`h-screen flex ${VSCODE_BG} ${VSCODE_TEXT}`}>
@@ -57,5 +59,6 @@ export default function Page() {
         <ContextMenu />
       </div>
     </S3Provider>
+    </S3ConnectionProvider>
   )
 }
