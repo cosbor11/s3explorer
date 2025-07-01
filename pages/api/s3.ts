@@ -1,3 +1,4 @@
+// pages/api/s3.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
 import {
   S3Client,
@@ -19,27 +20,37 @@ const s3 = new S3Client({
 })
 
 /* ───────── helpers ───────── */
-const ok = (res: NextApiResponse, data: any = null, code = 200) =>
-  res.status(code).json({ ok: true, data })
+const ok = (res: NextApiResponse, data: any = null, code = 200) => {
+  // log ok responses
+  console.log('api/s3 ok:', { code, data: typeof data === 'object' && data !== null ? Object.keys(data) : data })
+  return res.status(code).json({ ok: true, data })
+}
 
 const fail = (
   res: NextApiResponse,
   message: string,
   code: string,
   http = 400
-) => res.status(http).json({ ok: false, error: { code, message } })
+) => {
+  // log fail responses
+  console.error('api/s3 fail:', { code, message, http })
+  return res.status(http).json({ ok: false, error: { code, message } })
+}
 
 /* ───────── handler ───────── */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  console.log('api/s3 handler:', req.method, { query: req.query, body: req.body })
   try {
     /* ---------- GET ---------- */
     if (req.method === 'GET') {
       const { bucket, prefix, key } = req.query
+      console.log('api/s3 GET', { bucket, prefix, key })
 
       if (key && bucket) {
+        console.log('GetObjectCommand', { Bucket: String(bucket), Key: String(key) })
         const obj = await s3.send(
           new GetObjectCommand({ Bucket: String(bucket), Key: String(key) })
         )
@@ -57,6 +68,7 @@ export default async function handler(
       }
 
       if (bucket) {
+        console.log('ListObjectsV2Command', { Bucket: String(bucket), Prefix: prefix, Delimiter: '/' })
         const objs = await s3.send(
           new ListObjectsV2Command({
             Bucket: String(bucket),
@@ -67,6 +79,7 @@ export default async function handler(
         return ok(res, objs)
       }
 
+      console.log('ListBucketsCommand')
       const bs = await s3.send(new ListBucketsCommand({}))
       return ok(res, bs)
     }
@@ -74,15 +87,18 @@ export default async function handler(
     /* ---------- POST ---------- */
     if (req.method === 'POST') {
       const { bucket, folder, body } = req.body
+      console.log('api/s3 POST', { bucket, folder })
 
       if (bucket && !folder) {
         try {
+          console.log('HeadBucketCommand', { Bucket: bucket })
           await s3.send(new HeadBucketCommand({ Bucket: bucket }))
         } catch {
           /* does not exist */
         }
 
         try {
+          console.log('CreateBucketCommand', { Bucket: bucket })
           await s3.send(new CreateBucketCommand({ Bucket: bucket }))
           return ok(res, { message: `Bucket "${bucket}" created` })
         } catch (e: any) {
@@ -100,6 +116,8 @@ export default async function handler(
           : req.body.isBase64
             ? Buffer.from(req.body.body, 'base64')   // decode binary
             : req.body.body                          // plain text
+
+        console.log('PutObjectCommand', { Bucket: bucket, Key: key, isFolder, isBase64: req.body.isBase64 })
         await s3.send(
           new PutObjectCommand({
             Bucket: bucket,
@@ -120,9 +138,11 @@ export default async function handler(
     /* ---------- DELETE ---------- */
     if (req.method === 'DELETE') {
       const { bucket, folder, key } = req.query
+      console.log('api/s3 DELETE', { bucket, folder, key })
 
       if (bucket && !folder && !key) {
         try {
+          console.log('DeleteBucketCommand', { Bucket: String(bucket) })
           await s3.send(new DeleteBucketCommand({ Bucket: String(bucket) }))
           return ok(res, { message: `Bucket "${bucket}" deleted` })
         } catch (e: any) {
@@ -132,6 +152,7 @@ export default async function handler(
 
       if (bucket && folder) {
         const pref = String(folder).endsWith('/') ? String(folder) : `${folder}/`
+        console.log('ListObjectsV2Command for folder delete', { Bucket: String(bucket), Prefix: pref })
         const objs = await s3.send(
           new ListObjectsV2Command({
             Bucket: String(bucket),
@@ -139,19 +160,23 @@ export default async function handler(
           })
         )
         if (objs.Contents?.length) {
-          for (const o of objs.Contents)
-            if (o.Key)
+          for (const o of objs.Contents) {
+            if (o.Key) {
+              console.log('DeleteObjectCommand for folder item', { Bucket: String(bucket), Key: o.Key })
               await s3.send(
                 new DeleteObjectCommand({
                   Bucket: String(bucket),
                   Key: o.Key,
                 })
               )
+            }
+          }
         }
         return ok(res, { message: `Folder "${folder}" deleted` })
       }
 
       if (bucket && key) {
+        console.log('DeleteObjectCommand for file', { Bucket: String(bucket), Key: String(key) })
         await s3.send(
           new DeleteObjectCommand({
             Bucket: String(bucket),
@@ -167,6 +192,7 @@ export default async function handler(
     res.setHeader('Allow', ['GET', 'POST', 'DELETE'])
     return res.status(405).end('Method Not Allowed')
   } catch (e: any) {
+    console.error('api/s3 error:', { message: e.message, name: e.name, stack: e.stack })
     return fail(res, e.message, e.name ?? 'ServerError', 500)
   }
 }
