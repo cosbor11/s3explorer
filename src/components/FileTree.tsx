@@ -1,10 +1,11 @@
 // src/components/FileTree.tsx
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { S3Node } from '@/contexts/s3/types'
 import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
+import { useS3Connection } from '@/contexts/S3ConnectionContext'
 
 const BLUE = 'text-[#3794ff]'
 const GREEN = 'text-[#4ec9b0]'
@@ -23,23 +24,21 @@ export default function FileTree() {
   } = useS3()
 
   const fetchData = useAuthenticatedFetch()
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
-  useEffect(() => {
-    const loadTree = async () => {
-      const res = await fetchData('/api/s3')
-      if (res.ok) {
-        // Ensure every item has a unique key
-        const nodes = res.data?.Buckets?.map((b: any) => ({
+  const loadTree = async () => {
+    const res = await fetchData('/api/s3')
+    if (res.ok) {
+      setTree(
+        (res.data?.Buckets ?? []).map((b: any) => ({
           name: b.Name,
           fullKey: b.Name,
           isDir: true,
-        })) || []
-        setTree(nodes)
-      }
+        }))
+      )
     }
+  }
 
-    loadTree()
-  }, [fetchData, setTree])
 
   if (!tree) return null
 
@@ -64,7 +63,7 @@ export default function FileTree() {
     >
       <ul>
         {tree.map((n) => (
-          <li key={n.fullKey || n.name}>
+          <li key={n.fullKey}>
             <div
               className={`
                 flex items-center gap-1 px-2 py-0.5 cursor-pointer select-none rounded

@@ -1,7 +1,7 @@
 // src/contexts/S3ConnectionContext.tsx
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 export type S3Connection = {
   id: string
@@ -56,14 +56,21 @@ export function S3ConnectionProvider({ children }: { children: React.ReactNode }
   const selected = connections.find((c) => c.id === selectedId) ?? null
 
   useEffect(() => {
-    if (selected) {
-      const token = JSON.stringify({
-        accessKeyId: selected.accessKeyId,
-        secretAccessKey: selected.secretAccessKey,
-        region: selected.region,
-        endpoint: selected.endpoint,
-      })
-      sessionStorage.setItem('s3-session-token', token)
+    if (!selected) return
+
+    const token = JSON.stringify({
+      accessKeyId: selected.accessKeyId,
+      secretAccessKey: selected.secretAccessKey,
+      region: selected.region,
+      endpoint: selected.endpoint,
+    })
+    sessionStorage.setItem('s3-session-token', token)
+
+    const alreadyInitialized = sessionStorage.getItem('s3-init') === '1'
+
+    if (!alreadyInitialized) {
+      sessionStorage.setItem('s3-init', '1')
+      window.location.reload()
     }
   }, [selected])
 

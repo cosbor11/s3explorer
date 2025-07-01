@@ -1,12 +1,19 @@
-// src/components/connection/utils.ts
 import { S3Connection } from '@/contexts/S3ConnectionContext'
 
 export function generateUniqueName(base: string, existing: S3Connection[]): string {
-  const existingNames = new Set(existing.map((c) => c.name))
-  if (!existingNames.has(base)) return base
-  let suffix = 2
-  while (existingNames.has(`${base}-${suffix}`)) suffix++
-  return `${base}-${suffix}`
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  
+  if (isLocalhost) {
+    const existingNames = new Set(existing.map((c) => c.name))
+    if (!existingNames.has(base)) return base
+    let suffix = 2
+    while (existingNames.has(`${base}-${suffix}`)) suffix++
+    return `${base}-${suffix}`
+  } else {
+    const username = 'user' // Replace with actual username retrieval logic
+    const region = existing[0]?.region || 'unknown'
+    return `AWS ${username} (${region})`
+  }
 }
 
 export async function testConnection(conn: S3Connection): Promise<string | null> {

@@ -1,5 +1,6 @@
 // pages/api/test-s3-connection.ts
-import { S3Client, ListBucketsCommand } from '@aws-sdk/client-s3';
+import { getS3ClientUsingCreds } from '@/clients/s3';
+import { ListBucketsCommand } from '@aws-sdk/client-s3';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -7,20 +8,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { endpoint, region, accessKeyId, secretAccessKey, sessionToken } = req.body;
+  const { endpoint, region, accessKeyId, secretAccessKey } = req.body;
 
   try {
-    const client = new S3Client({
-      endpoint: endpoint || undefined, // Use default AWS endpoint if not provided
-      region: region || process.env.AWS_REGION || 'us-west-2',
-      credentials: {
-        accessKeyId: accessKeyId || process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY,
-        sessionToken: sessionToken || undefined, // Include only if provided
-      },
-      forcePathStyle: true,
-    });
-
+    const client = getS3ClientUsingCreds(region, endpoint, accessKeyId, secretAccessKey)
     const data = await client.send(new ListBucketsCommand({}));
     res.status(200).json({ success: true, buckets: data.Buckets });
   } catch (err: any) {

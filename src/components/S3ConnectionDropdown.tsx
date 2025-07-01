@@ -23,10 +23,13 @@ export default function S3ConnectionDropdown() {
             className="bg-[#232323] border border-[#333] text-sm text-white px-2 py-1 rounded cursor-pointer hover:bg-[#2a2a2a]"
             value={selected?.id ?? ''}
             onChange={(e) => {
-              if (e.target.value === '__manage') {
+              const value = e.target.value
+              if (value === '__manage') {
                 setShowManager(true)
               } else {
-                setSelectedById(e.target.value)
+                // Clear init flag so the provider will trigger reload
+                sessionStorage.removeItem('s3-init')
+                setSelectedById(value)
               }
             }}
           >
@@ -36,7 +39,7 @@ export default function S3ConnectionDropdown() {
                 {conn.name}
               </option>
             ))}
-            <option value="__manage">⚙️ Manage connections</option>
+            <option value="__manage">-- Manage connections --</option>
           </select>
         </div>
       </Tooltip>

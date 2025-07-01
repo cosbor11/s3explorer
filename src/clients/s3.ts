@@ -5,7 +5,7 @@ import crypto from 'crypto'
 
 type S3Token = {
   region: string
-  endpoint?: string
+  endpoint: string
   accessKeyId: string
   secretAccessKey: string
 }
@@ -31,16 +31,25 @@ export function getS3Client(req: NextApiRequest): S3Client {
   const isLocalstack =
     token.endpoint?.includes('localhost') || token.endpoint?.includes('127.0.0.1')
 
+  const client = getS3ClientUsingCreds(token.region, token.endpoint, token.accessKeyId, token.secretAccessKey)
+  clientCache.set(key, client)
+  return client
+}
+
+
+export function getS3ClientUsingCreds(region:string, endpoint:string, accessKeyId:string, secretAccessKey:string): S3Client {
+  const isLocalstack =
+    endpoint?.includes('localhost') || endpoint?.includes('127.0.0.1') || endpoint?.includes(':4566')
+
   const client = new S3Client({
-    region: token.region,
-    endpoint: isLocalstack ? token.endpoint : undefined,
+    region: region,
+    endpoint: isLocalstack ? endpoint : undefined,
     forcePathStyle: isLocalstack,
     credentials: {
-      accessKeyId: token.accessKeyId,
-      secretAccessKey: token.secretAccessKey,
+      accessKeyId: accessKeyId,
+      secretAccessKey: secretAccessKey,
     },
   })
 
-  clientCache.set(key, client)
   return client
 }

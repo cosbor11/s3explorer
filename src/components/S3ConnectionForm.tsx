@@ -1,11 +1,12 @@
 // src/components/S3ConnectionForm.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useS3Connection, S3Connection } from '@/contexts/S3ConnectionContext'
 import { presets } from '@/components/connection/presets'
 import { generateUniqueName, testConnection } from '@/components/connection/utils'
 import { nanoid } from 'nanoid'
+import isEqual from 'lodash.isequal'
 
 const REGIONS = [
   'us-east-1', 'us-west-1', 'us-west-2',
@@ -33,26 +34,25 @@ export default function S3ConnectionForm({
       region: '',
       accessKeyId: '',
       secretAccessKey: '',
-      sessionToken: '',
     }
   )
 
+  const [initialForm, setInitialForm] = useState(form)
   const [selectedPreset, setSelectedPreset] = useState('')
   const [testStatus, setTestStatus] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   useEffect(() => {
-    setForm(
-      editing || {
-        id: '',
-        name: '',
-        endpoint: '',
-        region: '',
-        accessKeyId: '',
-        secretAccessKey: '',
-        sessionToken: '',
-      }
-    )
+    const reset = editing || {
+      id: '',
+      name: '',
+      endpoint: '',
+      region: '',
+      accessKeyId: '',
+      secretAccessKey: ''
+    }
+    setForm(reset)
+    setInitialForm(reset)
   }, [editing])
 
   useEffect(() => {
@@ -68,6 +68,13 @@ export default function S3ConnectionForm({
     }
   }, [selectedPreset])
 
+  const isDirty = useMemo(() => !isEqual(form, initialForm), [form, initialForm])
+
+  const cancelLabel = useMemo(() => {
+    if (saveStatus === 'saved') return 'Done'
+    return isDirty ? 'Cancel' : 'Close'
+  }, [isDirty, saveStatus])
+
   const onChange = (field: keyof S3Connection, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
@@ -76,6 +83,7 @@ export default function S3ConnectionForm({
     setSaveStatus('saving')
     const final = { ...form, id: form.id || nanoid() }
     onSave(final)
+    setInitialForm(final)
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
   }
@@ -98,7 +106,6 @@ export default function S3ConnectionForm({
   }
 
   const activePreset = presets.find((p) => p.label === selectedPreset)
-  const needsSessionToken = activePreset?.values.sessionToken !== undefined
 
   return (
     <div className="flex flex-col gap-4 text-white">
@@ -172,17 +179,6 @@ export default function S3ConnectionForm({
             onChange={(e) => onChange('secretAccessKey', e.target.value)}
           />
         </div>
-
-        {needsSessionToken && (
-          <div className="col-span-2">
-            <label className="block text-sm mb-1">Session Token</label>
-            <input
-              className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
-              value={form.sessionToken}
-              onChange={(e) => onChange('sessionToken', e.target.value)}
-            />
-          </div>
-        )}
       </div>
 
       <div className="flex items-center gap-3 pt-2">
@@ -197,7 +193,7 @@ export default function S3ConnectionForm({
           onClick={onCancel}
           className="cursor-pointer border border-[#555] text-gray-300 hover:text-white px-4 py-1 rounded"
         >
-          Cancel
+          {cancelLabel}
         </button>
         {editing && (
           <button
