@@ -30,7 +30,7 @@ export default function ErrorBanner({ msg }: { msg: string }) {
     }
 
     return (
-        <div className="w-full flex items-center bg-red-900/80 border-b border-red-500 px-4 py-2 text-sm text-red-200 font-semibold relative z-50">
+        <div className="w-full flex items-center bg-red-900/80 border-b border-red-500 px-4 py-2 text-sm text-red-200 font-semibold relative z-50 h-10">
             <div ref={textRef} className="flex-1 truncate pr-4">
                 {msg}
             </div>
