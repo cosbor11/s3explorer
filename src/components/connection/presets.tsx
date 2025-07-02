@@ -46,6 +46,21 @@ export const presets: {
       accessKeyId: 'testuser',
       secretAccessKey: 'testsecret',
     },
-  }
-
+  },
+  {
+    label: 'AWS Temporary Session',
+    description: 'Use temporary credentials from AWS STS (e.g., for assumed roles or federated identities).',
+    instructions: (
+      <span>
+        Provide a temporary <code>sessionToken</code> along with your <code>accessKeyId</code> and <code>secretAccessKey</code>. These can be obtained via <code>aws sts get-session-token</code> or role assumption flows.
+      </span>
+    ),
+    values: {
+      endpoint: 'https://s3.amazonaws.com',
+      region: 'us-east-1',
+      accessKeyId: '',
+      secretAccessKey: '',
+      sessionToken: '',
+    },
+  },
 ]

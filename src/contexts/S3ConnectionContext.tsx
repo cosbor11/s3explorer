@@ -10,6 +10,7 @@ export type S3Connection = {
   region: string
   accessKeyId: string
   secretAccessKey: string
+  sessionToken?: string
 }
 
 const STORAGE_KEY = 's3-connections'
@@ -61,6 +62,7 @@ export function S3ConnectionProvider({ children }: { children: React.ReactNode }
     const token = JSON.stringify({
       accessKeyId: selected.accessKeyId,
       secretAccessKey: selected.secretAccessKey,
+      sessionToken: selected.sessionToken,
       region: selected.region,
       endpoint: selected.endpoint,
     })

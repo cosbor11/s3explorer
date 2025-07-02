@@ -2,7 +2,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
-import { getS3Client } from '@/clients/s3'
+import { getS3ClientFromRequest } from '@/clients/s3'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let s3
       try {
-        s3 = getS3Client(req)
+        s3 = getS3ClientFromRequest(req)
       } catch (e: any) {
         return res.status(400).json({ ok: false, error: { message: e.message } })
       }

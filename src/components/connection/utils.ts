@@ -27,7 +27,8 @@ export async function testConnection(conn: S3Connection): Promise<string | null>
         endpoint: conn.endpoint,
         region: conn.region,
         accessKeyId: conn.accessKeyId?.trim(),
-        secretAccessKey: conn.secretAccessKey?.trim()
+        secretAccessKey: conn.secretAccessKey?.trim(),
+        sessionToken: conn.sessionToken?.trim()
       }),
     })
 

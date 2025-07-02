@@ -33,11 +33,11 @@ export default function S3ConnectionManagerDialog({ onClose }: { onClose: () => 
         {/* Close Button */}
         <button
           onClick={handleClose}
-          className="absolute top-2 right-2 text-gray-400 hover:text-white cursor-pointer p-2 z-[60] mb-5"
+          className="absolute top-2 right-2 text-gray-400 hover:text-white cursor-pointer p-2 z-[60]"
           aria-label="Close"
         >
           <svg
-            className="w-4 h-4"
+            className="w-5 h-5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -46,7 +46,7 @@ export default function S3ConnectionManagerDialog({ onClose }: { onClose: () => 
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="3"
+              strokeWidth="2"
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
@@ -81,7 +81,7 @@ export default function S3ConnectionManagerDialog({ onClose }: { onClose: () => 
         </div>
 
         {/* Detail */}
-        <div className="flex-1 p-4 overflow-auto relative mt-3">
+        <div className="flex-1 p-4 overflow-auto relative">
           {flash && (
             <div className="absolute inset-0 bg-black bg-opacity-10 pointer-events-none z-50 rounded" />
           )}

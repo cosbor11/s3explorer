@@ -8,10 +8,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { endpoint, region, accessKeyId, secretAccessKey } = req.body;
+  const { endpoint, region, accessKeyId, secretAccessKey, sessionToken } = req.body;
 
   try {
-    const client = getS3ClientUsingCreds(region, endpoint, accessKeyId, secretAccessKey)
+    const client = getS3ClientUsingCreds(region, endpoint, accessKeyId, secretAccessKey, sessionToken)
     const data = await client.send(new ListBucketsCommand({}));
     res.status(200).json({ success: true, buckets: data.Buckets });
   } catch (err: any) {

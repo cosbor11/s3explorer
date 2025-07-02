@@ -1,7 +1,6 @@
 // pages/api/s3.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
 import {
-  S3Client,
   ListBucketsCommand,
   ListObjectsV2Command,
   GetObjectCommand,
@@ -10,9 +9,10 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   HeadBucketCommand,
+  GetBucketLocationCommand,
 } from '@aws-sdk/client-s3'
-import { getS3Client } from '@/clients/s3'
-
+import { getS3ClientFromRequest, getS3Client } from '@/clients/s3'
+import { S3Connection } from '@/contexts/S3ConnectionContext'
 
 /* ───────── helpers ───────── */
 const ok = (res: NextApiResponse, data: any = null, code = 200) => {
@@ -30,18 +30,29 @@ const fail = (
   return res.status(http).json({ ok: false, error: { code, message } })
 }
 
+async function getRegionAdjustedClient(conn: S3Connection, bucket: string) {
+  const client = getS3Client(conn)
+  const result = await client.send(new GetBucketLocationCommand({ Bucket: bucket }))
+
+  let region = result.LocationConstraint || 'us-east-1'
+  if (region === 'EU') region = 'eu-west-1'
+  return getS3Client({ ...conn, region })
+}
+
 /* ───────── handler ───────── */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   console.log('api/s3 handler:', req.method, { query: req.query, body: req.body })
   try {
-    const s3 = getS3Client(req)
+    const s3 = getS3ClientFromRequest(req)
+    const s3Conn = JSON.parse(req.headers['x-s3-session-token']?.toString() || '{}') as S3Connection
 
     if (req.method === 'GET') {
       const { bucket, prefix, key } = req.query
       console.log('api/s3 GET', { bucket, prefix, key })
 
       if (key && bucket) {
-        const obj = await s3.send(
+        const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
+        const obj = await adjustedClient.send(
           new GetObjectCommand({ Bucket: String(bucket), Key: String(key) })
         )
 
@@ -56,7 +67,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (bucket) {
-        const objs = await s3.send(
+        const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
+        const objs = await adjustedClient.send(
           new ListObjectsV2Command({
             Bucket: String(bucket),
             Prefix: prefix ? String(prefix) : undefined,
@@ -125,8 +137,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (bucket && folder) {
+        const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
         const pref = String(folder).endsWith('/') ? String(folder) : `${folder}/`
-        const objs = await s3.send(
+        const objs = await adjustedClient.send(
           new ListObjectsV2Command({
             Bucket: String(bucket),
             Prefix: pref,
@@ -135,7 +148,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (objs.Contents?.length) {
           for (const o of objs.Contents) {
             if (o.Key) {
-              await s3.send(
+              await adjustedClient.send(
                 new DeleteObjectCommand({
                   Bucket: String(bucket),
                   Key: o.Key,
@@ -148,7 +161,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (bucket && key) {
-        await s3.send(
+        const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
+        await adjustedClient.send(
           new DeleteObjectCommand({
             Bucket: String(bucket),
             Key: String(key),

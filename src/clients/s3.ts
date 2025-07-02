@@ -1,55 +1,93 @@
 // clients/s3.ts
-import { S3Client } from '@aws-sdk/client-s3'
-import type { NextApiRequest } from 'next'
-import crypto from 'crypto'
+import { S3Client, ListBucketsCommand } from '@aws-sdk/client-s3'
+import { S3Connection } from '@/contexts/S3ConnectionContext'
+import { NextApiRequest } from 'next'
 
-type S3Token = {
-  region: string
-  endpoint: string
-  accessKeyId: string
-  secretAccessKey: string
+function isLocalstackEndpoint(endpoint?: string): boolean {
+  if (!endpoint) return false
+
+  try {
+    const url = new URL(endpoint)
+    const hostname = url.hostname
+    const port = url.port ? parseInt(url.port, 10) : null
+
+    return (
+      (hostname === 'localhost' || hostname === '127.0.0.1') &&
+      (!port || port === 4566 || port === 4572)
+    )
+  } catch {
+    return false
+  }
 }
 
-const clientCache = new Map<string, S3Client>()
+function createClient(conn: S3Connection): S3Client {
+  const isLocalstack = isLocalstackEndpoint(conn.endpoint)
 
-function hashToken(token: S3Token): string {
-  return crypto
-    .createHash('sha256')
-    .update(`${token.region}:${token.endpoint || ''}:${token.accessKeyId}:${token.secretAccessKey}`)
-    .digest('hex')
-}
-
-export function getS3Client(req: NextApiRequest): S3Client {
-  const raw = req.headers['x-s3-session-token']
-  if (!raw || Array.isArray(raw)) throw new Error('Missing or invalid session token')
-
-  const token: S3Token = JSON.parse(raw)
-  const key = hashToken(token)
-
-  if (clientCache.has(key)) return clientCache.get(key)!
-
-  const isLocalstack =
-    token.endpoint?.includes('localhost') || token.endpoint?.includes('127.0.0.1')
-
-  const client = getS3ClientUsingCreds(token.region, token.endpoint, token.accessKeyId, token.secretAccessKey)
-  clientCache.set(key, client)
-  return client
-}
-
-
-export function getS3ClientUsingCreds(region:string, endpoint:string, accessKeyId:string, secretAccessKey:string): S3Client {
-  const isLocalstack =
-    endpoint?.includes('localhost') || endpoint?.includes('127.0.0.1') || endpoint?.includes(':4566')
-
-  const client = new S3Client({
-    region: region,
-    endpoint: isLocalstack ? endpoint : undefined,
-    forcePathStyle: isLocalstack,
+  return new S3Client({
+    region: conn.region,
+    endpoint: isLocalstack ? conn.endpoint : undefined, // ✅ Only use for LocalStack
     credentials: {
-      accessKeyId: accessKeyId,
-      secretAccessKey: secretAccessKey,
+      accessKeyId: conn.accessKeyId,
+      secretAccessKey: conn.secretAccessKey,
+      sessionToken: conn.sessionToken || undefined,
     },
+    forcePathStyle: true,
   })
+}
 
+export function getS3Client(conn: S3Connection): S3Client {
+  return createClient(conn)
+}
+
+export function getS3ClientUsingCreds(
+  region: string,
+  endpoint: string | undefined,
+  accessKeyId: string,
+  secretAccessKey: string,
+  sessionToken?: string
+): S3Client {
+  const isLocalStack = isLocalstackEndpoint(endpoint)
+  return new S3Client({
+    region,
+    endpoint: isLocalStack ? endpoint : undefined,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+      sessionToken: sessionToken || undefined,
+    },
+    forcePathStyle: true,
+  })
+}
+
+export function getS3ClientFromRequest(req: NextApiRequest): S3Client {
+  const s3SessionToken = req.headers['x-s3-session-token']?.toString()
+  if (!s3SessionToken) {
+    throw new Error('Missing s3-session-token header')
+  }
+
+  let conn: S3Connection
+  try {
+    conn = JSON.parse(s3SessionToken) as S3Connection
+  } catch {
+    throw new Error('Invalid s3-session-token: must be valid JSON')
+  }
+
+  if (!conn.accessKeyId || !conn.secretAccessKey || !conn.region) {
+    throw new Error('Invalid Session token')
+  }
+
+  const client = createClient(conn)
   return client
+}
+
+export async function testS3Connection(conn: S3Connection): Promise<string | null> {
+  const cacheKey = `${conn.sessionToken || 'no-session-token'}:${conn.region}:${conn.endpoint || 'no-endpoint'}`
+  try {
+    const client = createClient(conn)
+    await client.send(new ListBucketsCommand({}))
+    return null
+  } catch (err: any) {
+    sessionCache.delete(cacheKey)
+    return err.message || 'Failed to connect to S3'
+  }
 }

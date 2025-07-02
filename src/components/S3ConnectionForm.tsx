@@ -34,6 +34,7 @@ export default function S3ConnectionForm({
       region: '',
       accessKeyId: '',
       secretAccessKey: '',
+      sessionToken: '',
     }
   )
 
@@ -49,7 +50,8 @@ export default function S3ConnectionForm({
       endpoint: '',
       region: '',
       accessKeyId: '',
-      secretAccessKey: ''
+      secretAccessKey: '',
+      sessionToken: '',
     }
     setForm(reset)
     setInitialForm(reset)
@@ -177,6 +179,15 @@ export default function S3ConnectionForm({
             className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
             value={form.secretAccessKey}
             onChange={(e) => onChange('secretAccessKey', e.target.value)}
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm mb-1">Session Token</label>
+          <input
+            className="w-full bg-[#1e1e1e] border border-[#444] rounded px-2 py-1"
+            value={form.sessionToken || ''}
+            onChange={(e) => onChange('sessionToken', e.target.value)}
+            placeholder="Optional – only needed for temporary sessions"
           />
         </div>
       </div>
