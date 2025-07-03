@@ -2,21 +2,22 @@
 # cat-layout.sh
 # Prints the important files to understand S3explorer layout, UI shell, and structure.
 
-echo "-----------------src/app/layout.tsx-----------------------"
-cat src/app/layout.tsx
-echo "---------------- src/app/page.tsx ------------------------"
-cat src/app/page.tsx
-echo "------------------- src/components/Sidebar.tsx --------------------"
-cat src/components/Sidebar.tsx
-echo "------------------ src/components/FileTreePane.tsx ----------------------"
-cat src/components/FileTreePane.tsx
-echo "--------------------- src/components/InspectorPanel.tsx -------------------"
-cat src/components/InspectorPanel.tsx
-echo "---------------------  src/components/FileTree.tsx -------------------"
-cat src/components/FileTree.tsx
-echo "---------------------  src/contexts/s3/index.tsx -------------------"
-cat src/contexts/s3/index.tsx
-echo "---------------------  src/contexts/s3/types.ts -------------------"
-cat src/contexts/s3/types.ts
-echo "---------------------  src/components/BreadcrumbBar.tsx -------------------"
-cat src/components/BreadcrumbBar.tsx
+print_file() {
+  local file="$1"
+  echo ""
+  echo "---------------------  $file -------------------"
+  cat "$file"
+}
+
+print_file "src/app/layout.tsx"
+print_file "src/app/page.tsx"
+print_file "src/components/Sidebar.tsx"
+print_file "src/components/BreadcrumbBar.tsx"
+print_file "src/components/FileTreePane.tsx"
+print_file "src/components/FileTree.tsx"
+print_file "src/components/InspectorPanel.tsx"
+print_file "src/components/EditorPane.tsx"
+print_file "src/components/S3ConnectionDropdown.tsx"
+print_file "src/contexts/s3/index.tsx"
+print_file "src/contexts/s3/types.ts"
+print_file "src/contexts/S3ConnectionContext.tsx"

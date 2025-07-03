@@ -1,7 +1,7 @@
 // src/components/FileTreePane.tsx
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, ChangeEvent } from 'react'
 import { useS3 } from '@/contexts/s3'
 import useApi from '@/hooks/useApi'
 import EmptyDropZone from '@/components/EmptyDropZone'
@@ -41,6 +41,9 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     const longest = Math.max(10, ...(tree ?? []).map(n => n.name.length))
     return Math.max(MIN_W, longest * CHAR_PX + PADDING)
   })
+
+  // File/folder search state
+  const [search, setSearch] = useState('')
 
   // Only load file tree when a bucket is selected
   const [initialLoadDone, setInitialLoadDone] = useState(false)
@@ -171,7 +174,13 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     )
   }
 
-  const isEmpty = tree.length === 0
+  // Filter tree nodes by search string (applies to name only)
+  const filteredTree =
+    !search.trim()
+      ? tree
+      : tree.filter(n => n.name.toLowerCase().includes(search.trim().toLowerCase()))
+
+  const isEmpty = filteredTree.length === 0
   const isRoot = currentPrefix === '' || currentPrefix === undefined
   const emptyMsg = isRoot ? "This bucket is empty." : "This folder is empty."
 
@@ -193,7 +202,19 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     >
       {loading && <Spinner />}
       {error && <ErrorBanner msg={error} />}
-      
+
+      {/* Search bar above tree */}
+      <div className="px-4 pt-2 pb-1">
+        <input
+          type="text"
+          value={search}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+          placeholder="Search files/folders…"
+          className="w-full bg-[#1a1a1a] border border-[#333] rounded px-2 py-1 text-xs text-[#d4d4d4] outline-none focus:border-[#3794ff]"
+          spellCheck={false}
+        />
+      </div>
+
       {isEmpty ? (
         <EmptyDropZone
           prefix={currentPrefix}
@@ -203,7 +224,7 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
         />
       ) : (
         <ul className="w-full h-full overflow-auto px-6 py-4">
-          {tree.map((n) => (
+          {filteredTree.map((n) => (
             <li key={n.fullKey}>
               <div
                 className={`

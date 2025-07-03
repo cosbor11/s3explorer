@@ -96,7 +96,20 @@ export default function Sidebar() {
             }}
           >
             <button data-bucket
-              className={`w-full text-left px-2 py-1 rounded hover:bg-[#313131] text-white ${selectedBucket === b ? 'bg-[#232323] font-semibold' : ''}`}
+              className={`w-full text-left px-2 py-1 rounded transition-colors duration-75 select-none flex items-center
+                ${
+                  selectedBucket === b
+                    ? 'bg-[#252a30]/80 font-semibold text-[#cdd6f4] shadow-[inset_2px_0_0_0_#313c4e]'
+                    : 'hover:bg-[#313131] text-white'
+                }`}
+              style={{
+                ...(selectedBucket === b
+                  ? {
+                      // Optional: lighter font, and a subtle dot
+                      fontWeight: 500,
+                    }
+                  : {}),
+              }}
               onClick={() => {
                 if (selectedBucket === b) {
                   /* bucket already active → just reload its root prefix */
@@ -107,6 +120,11 @@ export default function Sidebar() {
                 }
               }}
             >
+              {selectedBucket === b ? (
+                <span className="inline-block w-2 h-2 mr-2 rounded-full bg-[#4ec9b0] opacity-70" />
+              ) : (
+                <span className="inline-block w-2 h-2 mr-2" />
+              )}
               {b}
             </button>
           </li>

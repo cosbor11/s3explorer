@@ -1,4 +1,3 @@
-// src/app/page.tsx
 'use client'
 
 import { useState, useRef } from 'react'
@@ -45,33 +44,36 @@ function MainArea() {
       <div className="flex-1 flex flex-row min-h-0">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-          {/* If no file selected: FileTree fills main area */}
-          {!selectedFile && !isNewFile ? (
-            <div className="flex-1 min-h-0 flex flex-col">
-              <FileTreePane fillMode />
+          <BreadcrumbBar />
+          <div className="flex-1 flex flex-row min-h-0">
+            <div className="flex-1 flex flex-col min-h-0">
+              {!selectedFile && !isNewFile ? (
+                <div className="flex-1 min-h-0">
+                  <FileTreePane fillMode />
+                </div>
+              ) : (
+                <div className="flex flex-1 flex-col min-h-0">
+                  <div className="flex-1 min-h-0">
+                    <EditorPane />
+                  </div>
+                  <div
+                    ref={dragRef}
+                    className="h-2 z-10 cursor-ns-resize bg-transparent hover:bg-[#555]/60"
+                    onMouseDown={onVerticalDrag}
+                    style={{ minHeight: 6 }}
+                  />
+                  <div
+                    style={{ height: bottomPaneHeight, minHeight: 80 }}
+                    className="overflow-auto border-t border-[#2d2d2d] bg-[#232323]"
+                  >
+                    <FileTreePane verticalMode />
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            // File selected: EditorPane above, FileTreePane below, resizable
-            <div className="flex flex-1 flex-col min-h-0">
-              <div className="flex-1 min-h-0">
-                <EditorPane />
-              </div>
-              <div
-                ref={dragRef}
-                className="h-2 z-10 cursor-ns-resize bg-transparent hover:bg-[#555]/60"
-                onMouseDown={onVerticalDrag}
-                style={{ minHeight: 6 }}
-              />
-              <div
-                style={{ height: bottomPaneHeight, minHeight: 80 }}
-                className="overflow-auto border-t border-[#2d2d2d] bg-[#232323]"
-              >
-                <FileTreePane verticalMode />
-              </div>
-            </div>
-          )}
+            <InspectorPanel className="w-64 flex-none" />
+          </div>
         </div>
-        <InspectorPanel />
         <ContextMenu />
       </div>
     </>
@@ -84,8 +86,6 @@ export default function Page() {
       <S3Provider>
         <LoadingOverlay />
         <div className={`h-screen flex flex-col ${VSCODE_BG} ${VSCODE_TEXT}`}>
-          {/* BreadcrumbBar is now always at the top, full width */}
-          <BreadcrumbBar />
           <MainArea />
         </div>
       </S3Provider>

@@ -73,8 +73,8 @@
   - Used throughout app and APIs as the auth/session primitive
 - **InspectorPanel:**  
   - Main detail/metadata/ACL editor panel (right side, resizable)
-- **FileTree:**  
-  - Left sidebar; hierarchical bucket/object/folder display
+- **FileTreePane:**  
+  - Main content area; under the editor when the editor is open; hierarchical folder display
 - **EditorPane:**  
   - Main editor area, supports text, markdown, images, CSV, raw editing
 - **ACL, CORS, Policy, Tags:**  
@@ -240,7 +240,6 @@
 │   │   ├── editor
 │   │   ├── EditorPane.tsx
 │   │   ├── ErrorBanner.tsx
-│   │   ├── FileTree.tsx
 │   │   ├── FileTreePane.tsx
 │   │   ├── inspector
 │   │   ├── InspectorPanel.tsx
