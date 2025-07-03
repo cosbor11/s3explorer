@@ -4,8 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { S3Node } from '@/contexts/s3/types'
-import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
-import { useS3Connection } from '@/contexts/S3ConnectionContext'
+import useApi from '@/hooks/useApi'
 
 const BLUE = 'text-[#3794ff]'
 const GREEN = 'text-[#4ec9b0]'
@@ -23,11 +22,11 @@ export default function FileTree() {
     selectedFile,
   } = useS3()
 
-  const fetchData = useAuthenticatedFetch()
+  const api = useApi()
   const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   const loadTree = async () => {
-    const res = await fetchData('/api/s3')
+    const res = await api.GET('/api/s3')
     if (res.ok) {
       setTree(
         (res.data?.Buckets ?? []).map((b: any) => ({

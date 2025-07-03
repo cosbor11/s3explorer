@@ -9,7 +9,7 @@ import React, {
   ReactNode,
   MouseEvent,
 } from 'react'
-import { api, buildTree, downloadBlob } from './api'
+import { buildTree, downloadBlob } from './api'
 import { resetEditor } from './editor'
 import * as menuHelpers from './menu'
 import type {
@@ -19,13 +19,12 @@ import type {
   S3ContextState,
 } from './types'
 import { Buffer } from 'buffer'
-
+import useApi from '@/hooks/useApi'
 
 const BINARY_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'pdf']
 const isBinary = (name: string) =>
   BINARY_EXT.includes(name.split('.').pop()?.toLowerCase() ?? '')
 
-/* ─── context & hook ─── */
 const S3Context = createContext<S3ContextState | null>(null)
 export const useS3 = () => {
   const ctx = useContext(S3Context)
@@ -33,9 +32,9 @@ export const useS3 = () => {
   return ctx
 }
 
-/* ─── provider ─── */
 export const S3Provider = ({ children }: { children: ReactNode }) => {
-  /* core */
+  const api = useApi()
+
   const [buckets, setBuckets] = useState<string[]>([])
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
   const [tree, setTree] = useState<S3Node[] | null>(null)
@@ -43,18 +42,15 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
   const [breadcrumb, setBreadcrumb] = useState<string[]>([])
   const [selectedFile, setSelectedFile] = useState<S3Node | null>(null)
 
-  /* editor */
   const [originalContent, setOriginalContent] = useState('')
   const [editedContent, setEditedContent] = useState('')
   const [isNewFile, setIsNewFile] = useState(false)
   const [newFilePrefix, setNewFilePrefix] = useState('')
   const [wrap, setWrap] = useState(false)
 
-  /* ui */
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  /* context-menu */
   const [menu, setMenu] = useState<MenuState>({
     visible: false,
     x: 0,
@@ -73,12 +69,17 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
   const confirmDiscard = () =>
     !dirty || confirm('You have unsaved changes. Discard them and continue?')
 
-  /* ─── bucket list ─── */
   const fetchBuckets = () => {
     setLoading(true)
-    api<any>('/api/s3')
-      .then((d) => setBuckets(d.Buckets?.map((b: any) => b.Name!) ?? []))
-      .catch((e) => setError(e.message))
+    api.GET('/api/s3')
+      .then((d) => {
+        console.log('Buckets API response:', d)
+        setBuckets(d.data?.Buckets?.map((b: any) => b.Name!) ?? [])
+      })
+      .catch((e) => {
+        console.error('Buckets API error:', e)
+        setError(e.message)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -87,10 +88,9 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     if (!name) return
     try {
       setLoading(true)
-      await api('/api/s3', {
-        method: 'POST',
+      await api.POST('/api/s3', {
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bucket: name }),
+        body: { bucket: name },
       })
       fetchBuckets()
     } catch (e: any) {
@@ -104,7 +104,7 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     if (!confirm(`Delete bucket "${b}"?`)) return
     try {
       setLoading(true)
-      await api(`/api/s3?bucket=${encodeURIComponent(b)}`, { method: 'DELETE' })
+      await api.DELETE(`/api/s3?bucket=${encodeURIComponent(b)}`)
       fetchBuckets()
       if (b === selectedBucket) setSelectedBucket(null)
     } catch (e: any) {
@@ -124,7 +124,6 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     _resetEditor()
   }
 
-  /* ─── prefix listing ─── */
   const openPrefix = (prefix: string) => {
     if (!selectedBucket) return
     if (!confirmDiscard()) return
@@ -133,13 +132,14 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     setError(null)
     setCurrentPrefix(prefix)
 
-    api<any>(
+    api.GET(
       `/api/s3?bucket=${encodeURIComponent(
         selectedBucket
       )}&prefix=${encodeURIComponent(prefix)}`
     )
       .then((d) => {
-        setTree(buildTree(prefix, d))
+        console.log('Prefix API response:', d)
+        setTree(buildTree(prefix, d.data))
         setBreadcrumb(prefix ? prefix.replace(/\/$/, '').split('/') : [])
         setSelectedFile(null)
         _resetEditor()
@@ -148,28 +148,26 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
       .finally(() => setLoading(false))
   }
 
-  /* ─── open file ─── */
   const openFile = (n: S3Node) => {
     if (!selectedBucket) return
     if (!confirmDiscard()) return
 
     setLoading(true)
-    api<{ body: string }>(
+    api.GET(
       `/api/s3?bucket=${encodeURIComponent(
         selectedBucket
       )}&key=${encodeURIComponent(n.fullKey)}`
     )
       .then((d) => {
         setSelectedFile(n)
-        setOriginalContent(d.body ?? '')
-        setEditedContent(d.body ?? '')
+        setOriginalContent(d.data?.body ?? '')
+        setEditedContent(d.data?.body ?? '')
         setIsNewFile(false)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }
 
-  /* ─── new / save ─── */
   const startNewFile = (prefix: string) => {
     if (!confirmDiscard()) return
     _resetEditor()
@@ -184,14 +182,13 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
       if (isNewFile) {
         const name = prompt('File name?')
         if (!name?.trim()) return false
-        await api('/api/s3', {
-          method: 'POST',
+        await api.POST('/api/s3', {
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: {
             bucket: selectedBucket,
             folder: `${newFilePrefix}${name.trim()}`,
             body: editedContent,
-          }),
+          },
         })
         setIsNewFile(false)
         setSelectedFile({
@@ -200,14 +197,13 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
           isDir: false,
         })
       } else if (selectedFile) {
-        await api('/api/s3', {
-          method: 'POST',
+        await api.POST('/api/s3', {
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: {
             bucket: selectedBucket,
             folder: selectedFile.fullKey,
             body: editedContent,
-          }),
+          },
         })
       }
       setOriginalContent(editedContent)
@@ -220,19 +216,17 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  /* ─── folder / file CRUD ─── */
   const createFolder = async (prefix: string) => {
     const f = prompt('Folder name?')
     if (!f) return
     try {
       setLoading(true)
-      await api('/api/s3', {
-        method: 'POST',
+      await api.POST('/api/s3', {
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           bucket: selectedBucket,
           folder: `${prefix}${f.endsWith('/') ? f : f + '/'}`,
-        }),
+        },
       })
       openPrefix(prefix)
     } catch (e: any) {
@@ -242,78 +236,71 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-/* ------------ replace renameNode with this version ------------ */
-const renameNode = async (node: S3Node, newName: string) => {
-  if (!selectedBucket) return
-  const targetKey = node.isDir
-    ? `${currentPrefix}${newName}/`
-    : `${currentPrefix}${newName}`
+  const renameNode = async (node: S3Node, newName: string) => {
+    if (!selectedBucket) return
+    const targetKey = node.isDir
+      ? `${currentPrefix}${newName}/`
+      : `${currentPrefix}${newName}`
 
-  try {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    /* ----- fetch source payload ----- */
-    let payload: string | undefined
-    let isBase64 = false
+      let payload: string | undefined
+      let isBase64 = false
 
-    if (!node.isDir) {
-      if (isBinary(node.name)) {
-        /* get as base-64 so bytes stay intact */
-        const { base64 } = await api<{ base64: string }>(
-          `/api/s3?bucket=${encodeURIComponent(
-            selectedBucket
-          )}&key=${encodeURIComponent(node.fullKey)}&base64=1`
-        )
-        payload = base64
-        isBase64 = true
-      } else {
-        /* text file */
-        const { body } = await api<{ body: string }>(
-          `/api/s3?bucket=${encodeURIComponent(
-            selectedBucket
-          )}&key=${encodeURIComponent(node.fullKey)}`
-        )
-        payload = body
+      if (!node.isDir) {
+        if (isBinary(node.name)) {
+          const resp = await api.GET(
+            `/api/s3?bucket=${encodeURIComponent(
+              selectedBucket
+            )}&key=${encodeURIComponent(node.fullKey)}&base64=1`
+          )
+          const base64 = resp.data?.base64
+          payload = base64
+          isBase64 = true
+        } else {
+          const resp = await api.GET(
+            `/api/s3?bucket=${encodeURIComponent(
+              selectedBucket
+            )}&key=${encodeURIComponent(node.fullKey)}`
+          )
+          const body = resp.data?.body
+          payload = body
+        }
       }
+
+      await api.POST('/api/s3', {
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          bucket: selectedBucket,
+          folder: targetKey,
+          body: payload ?? '',
+          isBase64,
+        },
+      })
+
+      await api.DELETE(
+        `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&${
+          node.isDir ? 'folder' : 'key'
+        }=${encodeURIComponent(node.fullKey)}`
+      )
+
+      refreshCurrent()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
     }
-
-    /* ----- create new object / folder ----- */
-    await api('/api/s3', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        bucket: selectedBucket,
-        folder: targetKey,
-        body: payload ?? '',
-        isBase64,
-      }),
-    })
-
-    /* ----- delete old object / folder ----- */
-    await api(
-      `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&${
-        node.isDir ? 'folder' : 'key'
-      }=${encodeURIComponent(node.fullKey)}`,
-      { method: 'DELETE' }
-    )
-
-    refreshCurrent()
-  } catch (e: any) {
-    setError(e.message)
-  } finally {
-    setLoading(false)
   }
-}
 
   const deleteFolder = async (n: S3Node) => {
     if (!confirm(`Delete folder "${n.name}"?`)) return
     try {
       setLoading(true)
-      await api(
+      await api.DELETE(
         `/api/s3?bucket=${encodeURIComponent(
           selectedBucket!
-        )}&folder=${encodeURIComponent(n.fullKey)}`,
-        { method: 'DELETE' }
+        )}&folder=${encodeURIComponent(n.fullKey)}`
       )
       openPrefix(currentPrefix)
     } catch (e: any) {
@@ -327,11 +314,10 @@ const renameNode = async (node: S3Node, newName: string) => {
     if (!confirm(`Delete file "${n.name}"?`)) return
     try {
       setLoading(true)
-      await api(
+      await api.DELETE(
         `/api/s3?bucket=${encodeURIComponent(
           selectedBucket!
-        )}&key=${encodeURIComponent(n.fullKey)}`,
-        { method: 'DELETE' }
+        )}&key=${encodeURIComponent(n.fullKey)}`
       )
       openPrefix(currentPrefix)
     } catch (e: any) {
@@ -341,62 +327,60 @@ const renameNode = async (node: S3Node, newName: string) => {
     }
   }
 
-/* ─── upload & download ─── */
-const uploadFiles = async (prefix: string, files: FileList) => {
-  if (!selectedBucket || !files.length) return
+  const uploadFiles = async (prefix: string, files: FileList) => {
+    if (!selectedBucket || !files.length) return
 
-  const MAX_JSON_BYTES =
-    Number(process.env.NEXT_PUBLIC_UPLOAD_LIMIT_MB ?? 25) * 1024 * 1024
+    const MAX_JSON_BYTES =
+      Number(process.env.NEXT_PUBLIC_UPLOAD_LIMIT_MB ?? 25) * 1024 * 1024
 
-  const oversize = Array.from(files).find(f => f.size > MAX_JSON_BYTES)
-  if (oversize) {
-    setError(
-      `"${oversize.name}" is ${(
-        oversize.size / 1024 / 1024
-      ).toFixed(1)} MB — exceeds the ${MAX_JSON_BYTES / 1024 / 1024} MB inline upload limit`
-    )
-    return
-  }
-
-  setLoading(true)
-  try {
-    for (const f of Array.from(files)) {
-      const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
-      const isBinary = !['txt', 'csv', 'tsv', 'md', 'json'].includes(ext)
-
-      const body = isBinary
-        ? Buffer.from(await f.arrayBuffer()).toString('base64') // ✅ fast, safe
-        : await f.text()
-
-      await api('/api/s3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bucket: selectedBucket,
-          folder: `${prefix}${f.name}`,
-          body,
-          isBase64: isBinary,
-        }),
-      })
+    const oversize = Array.from(files).find(f => f.size > MAX_JSON_BYTES)
+    if (oversize) {
+      setError(
+        `"${oversize.name}" is ${(
+          oversize.size / 1024 / 1024
+        ).toFixed(1)} MB — exceeds the ${MAX_JSON_BYTES / 1024 / 1024} MB inline upload limit`
+      )
+      return
     }
-    refreshCurrent()
-  } catch (e: any) {
-    setError(e.message)
-  } finally {
-    setLoading(false)
-  }
-}
 
+    setLoading(true)
+    try {
+      for (const f of Array.from(files)) {
+        const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
+        const isBinary = !['txt', 'csv', 'tsv', 'md', 'json'].includes(ext)
+
+        const body = isBinary
+          ? Buffer.from(await f.arrayBuffer()).toString('base64')
+          : await f.text()
+
+        await api.POST('/api/s3', {
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            bucket: selectedBucket,
+            folder: `${prefix}${f.name}`,
+            body,
+            isBase64: isBinary,
+          },
+        })
+      }
+      refreshCurrent()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const downloadNode = async (node: S3Node) => {
     if (!selectedBucket || node.isDir) return
     try {
       setLoading(true)
-      const { body } = await api<{ body: string }>(
+      const resp = await api.GET(
         `/api/s3?bucket=${encodeURIComponent(
           selectedBucket
         )}&key=${encodeURIComponent(node.fullKey)}`
       )
+      const body = resp.data?.body
       downloadBlob(node.name, new Blob([body]))
     } catch (e: any) {
       setError(e.message)
@@ -405,13 +389,11 @@ const uploadFiles = async (prefix: string, files: FileList) => {
     }
   }
 
-  /* ─── refresh helper ─── */
   const refreshCurrent = () => {
     if (selectedFile) openFile(selectedFile)
     else openPrefix(currentPrefix)
   }
 
-  /* ─── context-menu helpers ─── */
   const openMenu = (
     e: MouseEvent,
     type: MenuType,
@@ -420,7 +402,6 @@ const uploadFiles = async (prefix: string, files: FileList) => {
   ) => menuHelpers.openMenu(setMenu, e, type, node, target)
   const closeMenu = () => menuHelpers.closeMenu(setMenu)
 
-  /* ─── before-unload dirty guard ─── */
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => {
       if (dirty) {
@@ -432,15 +413,12 @@ const uploadFiles = async (prefix: string, files: FileList) => {
     return () => window.removeEventListener('beforeunload', h)
   }, [dirty])
 
-  /* ─── initial loads ─── */
   useEffect(() => {
     if (selectedBucket) openPrefix('')
   }, [selectedBucket])
   useEffect(fetchBuckets, [])
 
-  /* ─── context value ─── */
   const value: S3ContextState = {
-    /* data */
     buckets,
     tree,
     selectedBucket,
@@ -456,8 +434,6 @@ const uploadFiles = async (prefix: string, files: FileList) => {
     error,
     dirty,
     menu,
-
-    /* actions */
     fetchBuckets,
     openPrefix,
     openFile,
@@ -475,11 +451,8 @@ const uploadFiles = async (prefix: string, files: FileList) => {
     createBucket,
     deleteBucket,
     createFolder,
-
     selectBucket,
     setError,
-
-    /* menu helpers */
     openMenu,
     closeMenu,
   }

@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { Clock } from 'lucide-react'
-import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
+import useApi from '@/hooks/useApi'
 
 function formatDate(dateString: string, useUTC: boolean) {
   const date = new Date(dateString)
@@ -40,7 +40,7 @@ export default function DetailsSection() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [useUTC, setUseUTC] = useState(false)
-  const fetchData = useAuthenticatedFetch()
+  const api = useApi()
 
   useEffect(() => {
     if (!selectedBucket) return
@@ -57,9 +57,9 @@ export default function DetailsSection() {
       setLoading(true)
       setError(null)
       try {
-        const json = await fetchData(url)
-        if (!json.ok) throw new Error(json.error?.message ?? 'Failed to fetch metadata')
-        setMeta(json.data)
+        const res = await api.GET(url)
+        if (!res.ok) throw new Error(res.error?.message ?? 'Failed to fetch metadata')
+        setMeta(res.data)
       } catch (e: any) {
         setError(e.message)
       } finally {

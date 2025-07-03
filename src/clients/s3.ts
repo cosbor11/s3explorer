@@ -25,7 +25,7 @@ function createClient(conn: S3Connection): S3Client {
 
   return new S3Client({
     region: conn.region,
-    endpoint: isLocalstack ? conn.endpoint : undefined, // ✅ Only use for LocalStack
+    endpoint: isLocalstack ? conn.endpoint : undefined,
     credentials: {
       accessKeyId: conn.accessKeyId,
       secretAccessKey: conn.secretAccessKey,
@@ -87,7 +87,6 @@ export async function testS3Connection(conn: S3Connection): Promise<string | nul
     await client.send(new ListBucketsCommand({}))
     return null
   } catch (err: any) {
-    sessionCache.delete(cacheKey)
     return err.message || 'Failed to connect to S3'
   }
 }

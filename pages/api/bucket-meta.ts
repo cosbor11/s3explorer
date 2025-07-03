@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let lastModified: string | undefined
     for (const obj of list.Contents || []) {
       if (!lastModified || new Date(obj.LastModified!) > new Date(lastModified)) {
-        lastModified = obj.LastModified
+        lastModified = obj.LastModified?.toISOString()
       }
     }
 

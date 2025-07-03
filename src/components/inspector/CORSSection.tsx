@@ -13,7 +13,7 @@ import {
   Lock,
   Loader2,
 } from 'lucide-react'
-import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
+import useApi from '@/hooks/useApi'
 
 const PRESETS = [
   {
@@ -97,7 +97,7 @@ export default function PolicySection() {
   const [awsValidationMsg, setAwsValidationMsg] = useState<string | null>(null)
   const [awsValidated, setAwsValidated] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
-  const fetchData = useAuthenticatedFetch()
+  const api = useApi()
 
   const presetRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -123,10 +123,10 @@ export default function PolicySection() {
     setAwsValidated(false)
     setJustSaved(false)
 
-    fetchData(`/api/policy?bucket=${encodeURIComponent(selectedBucket)}`)
-      .then(json => {
-        if (!json.ok) throw new Error(json.error?.message ?? 'Failed to load policy')
-        const str = JSON.stringify(json.data.Policy, null, 2)
+    api.GET(`/api/policy?bucket=${encodeURIComponent(selectedBucket)}`)
+      .then(res => {
+        if (!res.ok) throw new Error(res.error?.message ?? 'Failed to load policy')
+        const str = JSON.stringify(res.data.Policy, null, 2)
         setPolicy(str)
         setOriginal(str)
       })
@@ -177,8 +177,7 @@ export default function PolicySection() {
       return false
     }
     try {
-      const json = await fetchData('/api/policy-validate', {
-        method: 'POST',
+      const res = await api.POST('/api/policy-validate', {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, policy: JSON.parse(policy) }),
       })
@@ -204,8 +203,7 @@ export default function PolicySection() {
     setSaving(true)
     setError(null)
     try {
-      const res = await fetchData('/api/policy', {
-        method: 'PUT',
+      const res = await api.PUT('/api/policy', {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, policy: JSON.parse(policy) }),
       })

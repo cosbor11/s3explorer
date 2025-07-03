@@ -1,7 +1,7 @@
 // pages/api/meta.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { HeadObjectCommand } from '@aws-sdk/client-s3'
 import { getS3ClientFromRequest } from '@/clients/s3'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

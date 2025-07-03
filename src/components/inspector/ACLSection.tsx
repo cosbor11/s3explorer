@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { Save, Info, Plus, Trash2, Check } from 'lucide-react'
-import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
+import useApi from '@/hooks/useApi'
 
 const CANNED_ACLS = ['private', 'public-read', 'public-read-write', 'authenticated-read']
 const PERMISSIONS = ['FULL_CONTROL', 'WRITE', 'WRITE_ACP', 'READ', 'READ_ACP']
@@ -89,7 +89,7 @@ export default function ACLSection() {
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [initialJsonText, setInitialJsonText] = useState<string>('')
 
-  const fetchData = useAuthenticatedFetch()
+  const api = useApi()
 
   const skipSyncRef = useRef(false)
 
@@ -104,12 +104,12 @@ export default function ACLSection() {
       setLoading(true)
       setError(null)
       try {
-        const json = await fetchData(url)
-        if (!json.ok) throw new Error(json.error?.message ?? 'Failed to load ACL')
-        const raw = getAclJson(json.data.Owner, json.data.Grants)
-        setOwner(json.data.Owner || null)
-        setGrants(json.data.Grants || [])
-        setCannedAcl(findCannedByGrants(json.data.Grants || []) || '')
+        const res = await api.GET(url)
+        if (!res.ok) throw new Error(res.error?.message ?? 'Failed to load ACL')
+        const raw = getAclJson(res.data.Owner, res.data.Grants)
+        setOwner(res.data.Owner || null)
+        setGrants(res.data.Grants || [])
+        setCannedAcl(findCannedByGrants(res.data.Grants || []) || '')
         setJsonText(raw)
         setInitialJsonText(raw)
       } catch (e: any) {
@@ -169,8 +169,7 @@ export default function ACLSection() {
             owner: cannedAcl ? undefined : owner,
           })
 
-      const res = await fetch('/api/acl', {
-        method: 'PUT',
+      const res = await api.PUT('/api/acl', {
         headers: { 'Content-Type': 'application/json' },
         body,
       })

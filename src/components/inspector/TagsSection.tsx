@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { Pencil, Trash2, Save, Check } from 'lucide-react'
 import { Loader2 } from 'lucide-react'
-import useAuthenticatedFetch from '@/hooks/useAuthenticatedFetch'
+import useApi from '@/hooks/useApi'
 
 export default function TagsSection() {
   const { selectedBucket, selectedFile } = useS3()
@@ -15,7 +15,7 @@ export default function TagsSection() {
   const [saving, setSaving] = useState(false)
   const [editIndex, setEditIndex] = useState<number | null>(null)
   const [savedMessage, setSavedMessage] = useState(false)
-  const fetchData = useAuthenticatedFetch()
+  const api = useApi()
 
   useEffect(() => {
     if (!selectedBucket) return
@@ -28,15 +28,15 @@ export default function TagsSection() {
       setLoading(true)
       setError(null)
       try {
-        const json = await fetchData(url)
-        if (!json.ok) {
-          if (json.error?.message?.includes('TagSet does not exist')) {
+        const res = await api.GET(url)
+        if (!res.ok) {
+          if (res.error?.message?.includes('TagSet does not exist')) {
             setTags([])
             return
           }
-          throw new Error(json.error?.message ?? 'Failed to fetch tags')
+          throw new Error(res.error?.message ?? 'Failed to fetch tags')
         }
-        setTags(json.data.TagSet ?? [])
+        setTags(res.data.TagSet ?? [])
       } catch (e: any) {
         setError(e.message)
       } finally {
@@ -87,8 +87,7 @@ export default function TagsSection() {
     setError(null)
     try {
       const cleaned = next.filter(tag => tag.Key.trim() !== '')
-      const json = await fetchData('/api/tags', {
-        method: 'PUT',
+      const res = await api.PUT('/api/tags', {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, key: selectedFile?.fullKey, tags: cleaned }),
       })
