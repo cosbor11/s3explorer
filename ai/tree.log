@@ -1,0 +1,6 @@
+./.next/types/package.json
+./.next/package.json
+./README.md
+./.gitignore
+./package.json
+./tsconfig.json

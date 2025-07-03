@@ -7,6 +7,7 @@ print_file() {
   echo "---------------------  $file -------------------"
   cat "$file"
 }
-print_file "src/hooks/useApi.ts"
-print_file "pages/api/s3.ts"
-print_file "pages/api/session/set-connection.ts"
+print_file "src/contexts/S3ConnectionContext.tsx"
+print_file "src/contexts/s3/index.tsx"
+print_file "src/contexts/s3/types.ts"
+print_file "src/clients/s3.ts"

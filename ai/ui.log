@@ -1,0 +1,922 @@
+➜  s3explorer git:(main) ✗ scripts/cat-ui.sh
+
+---------------------  src/app/layout.tsx -------------------
+import './globals.css';
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "S3explorer",
+  description: "connect to aws s3 database and manage buckets and objects",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+---------------------  src/app/page.tsx -------------------
+'use client'
+
+import { useState, useRef } from 'react'
+import { useS3, S3Provider } from '@/contexts/s3'
+import { S3ConnectionProvider } from '@/contexts/S3ConnectionContext'
+import Sidebar from '@/components/Sidebar'
+import BreadcrumbBar from '@/components/BreadcrumbBar'
+import ContextMenu from '@/components/ContextMenu'
+import EditorPane from '@/components/EditorPane'
+import FileTreePane from '@/components/FileTreePane'
+import ErrorBanner from '@/components/ErrorBanner'
+import LoadingOverlay from '@/components/LoadingOverlay'
+import InspectorPanel from '@/components/InspectorPanel'
+
+const VSCODE_BG = 'bg-[#1e1e1e]'
+const VSCODE_TEXT = 'text-[#d4d4d4]'
+
+function MainArea() {
+  const { selectedFile, isNewFile, error } = useS3()
+  const [bottomPaneHeight, setBottomPaneHeight] = useState(200)
+  const dragRef = useRef<HTMLDivElement>(null)
+
+  // Drag logic for vertical resizing (drag up to increase height)
+  const onVerticalDrag = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startH = bottomPaneHeight
+
+    const onMove = (ev: MouseEvent) => {
+      const newHeight = Math.max(80, startH + (startY - ev.clientY))
+      setBottomPaneHeight(newHeight)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <>
+      {error && <ErrorBanner msg={error} />}
+      <div className="flex-1 flex flex-row min-h-0">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <BreadcrumbBar />
+          <div className="flex-1 flex flex-row min-h-0">
+            <div className="flex-1 flex flex-col min-h-0">
+              {!selectedFile && !isNewFile ? (
+                <div className="flex-1 min-h-0">
+                  <FileTreePane fillMode />
+                </div>
+              ) : (
+                <div className="flex flex-1 flex-col min-h-0">
+                  <div className="flex-1 min-h-0">
+                    <EditorPane />
+                  </div>
+                  <div
+                    ref={dragRef}
+                    className="h-2 z-10 cursor-ns-resize bg-transparent hover:bg-[#555]/60"
+                    onMouseDown={onVerticalDrag}
+                    style={{ minHeight: 6 }}
+                  />
+                  <div
+                    style={{ height: bottomPaneHeight, minHeight: 80 }}
+                    className="overflow-auto border-t border-[#2d2d2d] bg-[#232323]"
+                  >
+                    <FileTreePane verticalMode />
+                  </div>
+                </div>
+              )}
+            </div>
+            <InspectorPanel className="w-64 flex-none" />
+          </div>
+        </div>
+        <ContextMenu />
+      </div>
+    </>
+  )
+}
+
+export default function Page() {
+  return (
+    <S3ConnectionProvider>
+      <S3Provider>
+        <LoadingOverlay />
+        <div className={`h-screen flex flex-col ${VSCODE_BG} ${VSCODE_TEXT}`}>
+          <MainArea />
+        </div>
+      </S3Provider>
+    </S3ConnectionProvider>
+  )
+}
+---------------------  src/components/Sidebar.tsx -------------------
+// src/components/Sidebar.tsx
+'use client'
+
+import Image from 'next/image'
+import { useMemo, useState } from 'react'
+import { useS3 } from '@/contexts/s3'
+
+const MIN_W = 425 
+const CHAR_PX = 8
+const PADDING = 64
+
+export default function Sidebar() {
+  const {
+    buckets,
+    selectedBucket,
+    createBucket,
+    selectBucket,
+    openMenu,
+    openPrefix,
+  } = useS3()
+
+  const longest = useMemo(() => Math.max(0, ...buckets.map(b => b.length)), [buckets])
+  const [width, setWidth] = useState(Math.max(MIN_W, longest * CHAR_PX + PADDING))
+
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const sx = e.clientX
+    const sw = width
+    const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, sw + (ev.clientX - sx)))
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  // --- Add this handler for sidebar context menu
+  const onSidebarContextMenu = (e: React.MouseEvent) => {
+    // Prevent context if right-click is on a bucket button
+    if (
+      (e.target as HTMLElement).closest('button[data-bucket]')
+    ) return
+    e.preventDefault()
+    openMenu(e, 'emptySidebar')
+  }
+
+  return (
+    <div
+      className="relative flex flex-col border-r border-[#2d2d2d] bg-[#252526] select-none"
+      style={{ width, minWidth: MIN_W }}
+      onContextMenu={onSidebarContextMenu}
+    >
+      {/* header */}
+      <div className="px-3 py-2 border-b border-[#2d2d2d] flex justify-between items-center overflow-visible">
+        <div className="p-[1px]">
+          <Image
+            src="/img/s3-explorer-logo.png"
+            alt="S3 Explorer"
+            width={110}
+            height={22}
+            priority
+          />
+        </div>
+        <button
+          aria-label="Create bucket"
+          className="w-7 h-7 flex items-center justify-center rounded bg-[#303030] hover:bg-[#444] border border-[#555] transition-colors"
+          onClick={createBucket}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="#4ec9b0" strokeWidth="1.5" />
+            <defs>
+              <linearGradient id="gradPlus" x1="0" y1="0" x2="24" y2="24">
+                <stop offset="0%" stopColor="#3794ff" />
+                <stop offset="100%" stopColor="#4ec9b0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M12 7v10M7 12h10"
+              stroke="url(#gradPlus)"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      {/* bucket list */}
+      <ul className="px-2 py-2 overflow-auto grow">
+        {buckets.map(b => (
+          <li
+            key={b}
+            onContextMenu={e => {
+              // right-click: just open context menu, DO NOT select
+              openMenu(e, 'bucket', undefined, b)
+            }}
+          >
+            <button data-bucket
+              className={`w-full text-left px-2 py-1 rounded transition-colors duration-75 select-none flex items-center
+                ${
+                  selectedBucket === b
+                    ? 'bg-[#252a30]/80 font-semibold text-[#cdd6f4] shadow-[inset_2px_0_0_0_#313c4e]'
+                    : 'hover:bg-[#313131] text-white'
+                }`}
+              style={{
+                ...(selectedBucket === b
+                  ? {
+                      // Optional: lighter font, and a subtle dot
+                      fontWeight: 500,
+                    }
+                  : {}),
+              }}
+              onClick={() => {
+                if (selectedBucket === b) {
+                  /* bucket already active → just reload its root prefix */
+                  openPrefix('')
+                } else {
+                  /* switch buckets */
+                  selectBucket(b)
+                }
+              }}
+            >
+              {selectedBucket === b ? (
+                <span className="inline-block w-2 h-2 mr-2 rounded-full bg-[#4ec9b0] opacity-70" />
+              ) : (
+                <span className="inline-block w-2 h-2 mr-2" />
+              )}
+              {b}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {/* drag handle */}
+      <div
+        className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
+        onMouseDown={startDrag}
+      />
+    </div>
+  )
+}
+
+---------------------  src/components/BreadcrumbBar.tsx -------------------
+// src/components/BreadcrumbBar.tsx
+'use client'
+
+import Tooltip from '@/components/Tooltip'
+import { useS3 } from '@/contexts/s3'
+import S3ConnectionDropdown from './S3ConnectionDropdown'
+
+const VSCODE_BORDER = 'border-[#2d2d2d]'
+const linkCls =
+  'text-[#3794ff] cursor-pointer hover:underline hover:text-[#75b5ff] transition-colors'
+const Slash = () => <span className="mx-[2px] select-none text-[#555]">/</span>
+
+export default function BreadcrumbBar() {
+  const {
+    selectedBucket,
+    breadcrumb,
+    openPrefix,
+    isNewFile,
+    selectedFile,
+    dirty,
+    wrap,
+    setWrap,
+    saveFile,
+    selectBucket,
+    refreshCurrent,
+  } = useS3()
+
+  const viewingFile = isNewFile || selectedFile
+
+  const onRefresh = () => {
+    if (dirty && viewingFile) {
+      const discard = confirm(
+        'This file has unsaved changes. Discard changes and reload?'
+      )
+      if (!discard) return
+    }
+    refreshCurrent()
+  }
+
+  return (
+    <div
+      className={`h-12 border-b ${VSCODE_BORDER} px-6 flex items-center justify-between bg-[#232323] text-sm`}
+    >
+      {/* path */}
+      <div className="flex items-center flex-wrap">
+        <button className={`${linkCls} font-semibold`} onClick={() => selectBucket(null)}>
+          s3://
+        </button>
+
+        {selectedBucket && (
+          <button
+            className={`${linkCls} font-semibold ml-0.5`}
+            onClick={() => {
+              selectBucket(selectedBucket)
+              openPrefix('')
+            }}
+          >
+            {selectedBucket}
+          </button>
+        )}
+
+        {breadcrumb.map((seg, i) => (
+          <span key={i} className="flex items-center">
+            <Slash />
+            <button
+              className={linkCls}
+              onClick={() => openPrefix(breadcrumb.slice(0, i + 1).join('/') + '/')}
+            >
+              {seg}
+            </button>
+          </span>
+        ))}
+
+        {viewingFile && (
+          <>
+            <Slash />
+            <span className="font-semibold">
+              {isNewFile ? '(new file)' : selectedFile?.name}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* right-side actions */}
+      <div className="flex items-center gap-3">
+        {/* refresh */}
+        <Tooltip label="Refresh">
+          <button
+            onClick={onRefresh}
+            className="px-2 py-1 rounded border border-[#333] bg-[#232323] hover:bg-[#333] transition-colors flex items-center"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M4 4v6h6" stroke="#4ec9b0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M20 20v-6h-6" stroke="#4ec9b0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M20 9a8 8 0 0 0-15-3M4 15a8 8 0 0 0 15 3"
+                stroke="#4ec9b0" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </Tooltip>
+
+        {/* s3 connection dropdown */}
+        <S3ConnectionDropdown />
+      </div>
+    </div>
+  )
+}
+
+---------------------  src/components/FileTreePane.tsx -------------------
+// src/components/FileTreePane.tsx
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useS3 } from '@/contexts/s3'
+import useApi from '@/hooks/useApi'
+import EmptyDropZone from '@/components/EmptyDropZone'
+import FolderSearchBar from './FolderSearchBar'
+
+const MIN_W = 160
+const CHAR_PX = 8
+const PADDING = 32
+
+const BLUE = 'text-[#3794ff]'
+const GREEN = 'text-[#4ec9b0]'
+const TEXT = 'text-[#d4d4d4]'
+
+interface FileTreePaneProps {
+  verticalMode?: boolean
+  fillMode?: boolean
+}
+
+export default function FileTreePane({ verticalMode, fillMode }: FileTreePaneProps) {
+  const {
+    selectedBucket,
+    tree,
+    setTree,
+    openPrefix,
+    openFile,
+    openMenu,
+    uploadFiles,
+    currentPrefix,
+    selectedFile,
+    loading,
+    error,
+    setError,
+    search,
+    setSearch,
+    searchMode,
+    setSearchMode,
+    refreshCurrent,
+    doRemoteSearch,
+    lastRemoteSearch,
+    setLastRemoteSearch,
+  } = useS3()
+
+  const api = useApi()
+  const [width, setWidth] = useState(() => {
+    if (!tree) return 220
+    const longest = Math.max(10, ...(tree ?? []).map(n => n.name.length))
+    return Math.max(MIN_W, longest * CHAR_PX + PADDING)
+  })
+
+  const [inputValue, setInputValue] = useState(search)
+  useEffect(() => {
+    setInputValue(search)
+  }, [search])
+
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
+
+  useEffect(() => {
+    if (!selectedBucket) {
+      setTree(null)
+      setInitialLoadDone(false)
+      return
+    }
+    if (!tree && !initialLoadDone) {
+      const loadTree = async () => {
+        const res = await api.GET(
+          `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&prefix=${encodeURIComponent(currentPrefix || '')}`
+        )
+        if (res.ok) {
+          const prefixes = (res.data?.CommonPrefixes ?? []).map((p: any) => ({
+            name: p.Prefix.replace(/\/$/, '').split('/').pop(),
+            fullKey: p.Prefix,
+            isDir: true,
+          }))
+          const objects = (res.data?.Contents ?? [])
+            .filter((obj: any) => obj.Key !== '' && !obj.Key.endsWith('/'))
+            .map((obj: any) => ({
+              name: obj.Key.split('/').pop(),
+              fullKey: obj.Key,
+              isDir: false,
+            }))
+          setTree([...prefixes, ...objects])
+          setSearchMode(res.data?.IsTruncated ? 'begins' : 'contains')
+        }
+        setInitialLoadDone(true)
+      }
+      loadTree()
+    }
+  }, [selectedBucket, tree, setTree, api, initialLoadDone, currentPrefix, setSearchMode])
+
+  const onDrag = (e: React.MouseEvent) => {
+    if (verticalMode || fillMode) return
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = width
+    const move = (ev: MouseEvent) =>
+      setWidth(Math.max(MIN_W, startW + (ev.clientX - startX)))
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  const isActive = (n: { fullKey: string }) => selectedFile?.fullKey === n.fullKey
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      if (e.dataTransfer.files.length) {
+        uploadFiles(currentPrefix, e.dataTransfer.files)
+      }
+    },
+    [uploadFiles, currentPrefix]
+  )
+
+  const handleInputChange = (value: string) => {
+    setInputValue(value)
+  }
+
+  const handleClearSearch = () => {
+    setInputValue('')
+    setSearch('')
+    setLastRemoteSearch('')
+    refreshCurrent()
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }
+
+  const handleSearch = () => {
+    setSearch(inputValue)
+    if (!inputValue.trim()) {
+      setLastRemoteSearch('')
+      refreshCurrent()
+      return
+    }
+    if (searchMode === 'begins') {
+      if (lastRemoteSearch !== `${inputValue}:${searchMode}`) {
+        setLastRemoteSearch(`${inputValue}:${searchMode}`)
+        doRemoteSearch(inputValue, searchMode)
+      }
+    }
+  }
+
+  const filteredTree =
+    !search.trim() || searchMode === 'begins'
+      ? tree
+      : tree?.filter(n =>
+          n.name.toLowerCase().includes(search.trim().toLowerCase())
+        )
+
+  const isSearch = !!search.trim()
+  const isEmpty = !filteredTree || filteredTree.length === 0
+  const isRoot = currentPrefix === '' || currentPrefix === undefined
+
+  if (!selectedBucket) {
+    return (
+      <div
+        className={`relative bg-[#232323] flex items-center justify-center select-none${
+          verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
+        }`}
+        style={
+          verticalMode
+            ? { width: '100%', height: '100%', minHeight: 80 }
+            : fillMode
+              ? { width: '100%', minHeight: 100, height: '100%' }
+              : { width, minWidth: MIN_W, minHeight: 100 }
+        }
+      >
+        <span className="text-[#888] text-sm">Select a bucket to browse files</span>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`relative bg-[#232323] flex flex-col${
+        verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
+      }`}
+      style={
+        verticalMode
+          ? { width: '100%', height: '100%', minHeight: 80 }
+          : fillMode
+            ? { width: '100%', minHeight: 100, height: '100%' }
+            : { width, minWidth: MIN_W }
+      }
+      onContextMenu={(e) => openMenu(e, 'emptyTree')}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
+    >
+      <FolderSearchBar
+        search={inputValue}
+        setSearch={handleInputChange}
+        context="files"
+        onSearchKeyDown={handleSearchKeyDown}
+        onSearchClick={handleSearch}
+        onClearClick={handleClearSearch}
+      />
+      <div className="overflow-auto h-full" ref={containerRef}>
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+            <svg className="animate-spin h-7 w-7 text-[#3794ff]" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+          </div>
+        )}
+        {error && (
+          <div className="absolute top-0 left-0 w-full px-4 py-2 bg-red-700 text-white text-xs z-50 flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              className="ml-4 px-2 py-1 rounded bg-red-800 hover:bg-red-900"
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {isEmpty ? (
+          isSearch
+            ? (
+              <div className="flex flex-col items-center justify-center pt-12 pb-8 text-neutral-400 select-none">
+                <span className="text-sm">
+                  No matches for files that {searchMode === 'begins'
+                    ? 'begin with'
+                    : 'contain'}&nbsp;
+                  <span className="font-mono bg-[#1e1e1e] px-2 py-1 rounded">{search}</span>
+                </span>
+              </div>
+            )
+            : <EmptyDropZone
+                prefix={currentPrefix}
+                onFiles={files => uploadFiles(currentPrefix, files)}
+                message={isRoot ? "This bucket is empty." : "This folder is empty."}
+                loading={loading}
+              />
+        ) : (
+          <ul className="w-full px-6 py-4">
+            {filteredTree!.map((n) => (
+              <li key={n.fullKey}>
+                <div
+                  className={`
+                    flex items-center gap-1 px-2 py-0.5 cursor-pointer select-none rounded
+                    hover:bg-[#232323] ${isActive(n) ? 'bg-[#333333]' : ''}
+                  `}
+                  onClick={() => (n.isDir ? openPrefix(n.fullKey) : openFile(n))}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    openMenu(e, n.isDir ? 'folder' : 'file', n)
+                  }}
+                >
+                  {n.isDir ? (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      className={`${BLUE} mr-1`}
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M10.828 6H20a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4.828a1 1 0 0 0 .707-.293l1.172-1.172a2 2 0 0 1 1.414-.586z"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      className={`${GREEN} mr-1`}
+                      fill="none"
+                    >
+                      <path
+                        d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6Z"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <path
+                        d="M14 2v4a2 2 0 0 0 2 2h4"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <path
+                        d="M8 12h8M8 15h8"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  )}
+                  <span className={n.isDir ? BLUE : TEXT}>
+                    {n.name}
+                    {n.isDir ? '/' : ''}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {!verticalMode && !fillMode && (
+        <div
+          className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
+          onMouseDown={onDrag}
+        />
+      )}
+    </div>
+  )
+}
+
+---------------------  src/components/InspectorPanel.tsx -------------------
+// src/components/InspectorPanel.tsx
+'use client'
+
+import { useState, Suspense, lazy } from 'react'
+import { useS3 } from '@/contexts/s3'
+
+const MIN_W = 250
+
+const Section = ({
+  title,
+  children,
+  open,
+  onToggle,
+}: {
+  title: string
+  children: React.ReactNode
+  open: boolean
+  onToggle: () => void
+}) => (
+  <div className="border-b border-[#333]">
+    <button
+      onClick={onToggle}
+      className="w-full text-left px-4 py-2 font-semibold bg-[#232323] hover:bg-[#2e2e2e]"
+      tabIndex={0}
+    >
+      {open ? '▾' : '▸'} {title}
+    </button>
+    {open && <div className="px-4 py-2 text-sm text-[#d4d4d4]">{children}</div>}
+  </div>
+)
+
+export default function InspectorPanel() {
+  const { selectedBucket } = useS3()
+  const [width, setWidth] = useState(360)
+  const [open, setOpen] = useState({
+    details: false,
+    permissions: false,
+    tags: false,
+    policy: false,
+    cors: false,
+  })
+
+  const LazyDetails = lazy(() => import('@/components/inspector/DetailsSection'))
+  const LazyACL = lazy(() => import('@/components/inspector/ACLSection'))
+  const LazyTags = lazy(() => import('@/components/inspector/TagsSection'))
+  const LazyPolicy = lazy(() => import('@/components/inspector/PolicySection'))
+  const LazyCORS = lazy(() => import('@/components/inspector/CORSSection'))
+
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const sx = e.clientX
+    const sw = width
+    const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, sw - (ev.clientX - sx)))
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  if (!selectedBucket) return null
+
+  return (
+    <div
+      className="relative border-l border-[#2d2d2d] bg-[#1e1e1e] overflow-auto select-none"
+      style={{ width, minWidth: MIN_W }}
+    >
+      <Section
+        title="Details"
+        open={open.details}
+        onToggle={() => setOpen(o => ({ ...o, details: !o.details }))}
+      >
+        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+          {open.details && <LazyDetails />}
+        </Suspense>
+      </Section>
+      <Section
+        title="Access Control List (ACL)"
+        open={open.permissions}
+        onToggle={() => setOpen(o => ({ ...o, permissions: !o.permissions }))}
+      >
+        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+          {open.permissions && <LazyACL />}
+        </Suspense>
+      </Section>
+      <Section
+        title="Tags"
+        open={open.tags}
+        onToggle={() => setOpen(o => ({ ...o, tags: !o.tags }))}
+      >
+        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+          {open.tags && <LazyTags />}
+        </Suspense>
+      </Section>
+      <Section
+        title="Bucket Policy"
+        open={open.policy}
+        onToggle={() => setOpen(o => ({ ...o, policy: !o.policy }))}
+      >
+        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+          {open.policy && <LazyPolicy />}
+        </Suspense>
+      </Section>
+      <Section
+        title="CORS"
+        open={open.cors}
+        onToggle={() => setOpen(o => ({ ...o, cors: !o.cors }))}
+      >
+        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+          {open.cors && <LazyCORS />}
+        </Suspense>
+      </Section>
+
+      {/* drag handle */}
+      <div
+        className="absolute top-0 left-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
+        onMouseDown={startDrag}
+      />
+    </div>
+  )
+}
+
+---------------------  src/components/EditorPane.tsx -------------------
+// src/components/EditorPane.tsx   (orchestrator)
+'use client'
+
+import { JSX, useState } from 'react'
+import { useS3 } from '@/contexts/s3'
+import ImageViewer from './editor/ImageViewer'
+import CsvViewer from './editor/CsvViewer'
+import TextPreview from './editor/TextPreview'
+import RawEditor from './editor/RawEditor'
+
+const CSV_EXT = ['csv', 'tsv']
+
+export default function EditorPane() {
+  const { selectedFile, isNewFile } = useS3()
+  const [mode, setMode] = useState<'preview' | 'raw'>('preview')
+
+  if (!selectedFile && !isNewFile) return null
+
+  const ext = selectedFile?.name.split('.').pop()?.toLowerCase()
+  let content: JSX.Element
+
+  if (!isNewFile && ext && CSV_EXT.includes(ext) && mode === 'preview')
+    content = <CsvViewer onEdit={() => setMode('raw')} />
+  else if (
+    !isNewFile &&
+    (ext === 'md' || ext === 'markdown' || ext === 'json') &&
+    mode === 'preview'
+  )
+    content = <TextPreview onEdit={() => setMode('raw')} />
+  else if (!isNewFile && ext && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext))
+    content = <ImageViewer />
+  else
+    content = <RawEditor onPreview={() => setMode('preview')} />
+
+  return (
+    <div className="flex-1 flex flex-col h-full">{content}</div>
+  )
+}
+
+---------------------  src/components/S3ConnectionDropdown.tsx -------------------
+// src/components/S3ConnectionDropdown.tsx
+'use client'
+
+import { useState } from 'react'
+import Tooltip from './Tooltip'
+import { useS3Connection } from '@/contexts/S3ConnectionContext'
+import S3ConnectionManagerDialog from './S3ConnectionManagerDialog'
+
+export default function S3ConnectionDropdown() {
+  const {
+    connections,
+    selected,
+    setSelectedById,
+  } = useS3Connection()
+
+  const [showManager, setShowManager] = useState(false)
+
+  return (
+    <>
+      <Tooltip label="Select S3 connection">
+        <div className="flex items-center gap-2">
+          <select
+            className="bg-[#232323] border border-[#333] text-sm text-white px-2 py-1 rounded cursor-pointer hover:bg-[#2a2a2a]"
+            value={selected?.id ?? ''}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value === '__manage') {
+                setShowManager(true)
+              } else {
+                // Clear init flag so the provider will trigger reload
+                sessionStorage.removeItem('s3-init')
+                setSelectedById(value)
+              }
+            }}
+          >
+            <option value="" disabled>Select connection</option>
+            {connections.map((conn) => (
+              <option key={conn.id} value={conn.id}>
+                {conn.name}
+              </option>
+            ))}
+            <option value="__manage">-- Manage connections --</option>
+          </select>
+        </div>
+      </Tooltip>
+
+      {showManager && (
+        <S3ConnectionManagerDialog onClose={() => setShowManager(false)} />
+      )}
+    </>
+  )
+}
+➜  s3explorer git:(main) ✗ 

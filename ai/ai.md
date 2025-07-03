@@ -377,3 +377,62 @@ return res.status(400).json({ ok: false, error: { code, message } })
  - ONLY RESPOND WITH THE UPDATED FILES. IF A FILE IS UNCHANGED DONT INCLUDE IT IN THE RESPONSE. ALWAYS INCLUDE ALL FILES CHANGED. 
  - DONT EVER USE PLACEHOLDERS FOR CODE
  - NEVER REMOVE OR CHANGE EXISTING FUNCTIONALITY OUTSIDE OF SCOPE 
+
+
+
+echo "s3explorer git:(main) ✗ tree -L 3 src"
+src
+├── app
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── clients
+│   └── s3.ts
+├── components
+│   ├── BreadcrumbBar.tsx
+│   ├── connection
+│   │   ├── presets.tsx
+│   │   ├── read-permissions.json
+│   │   ├── utils.ts
+│   │   └── write-permissions.json
+│   ├── ContextMenu.tsx
+│   ├── editor
+│   │   ├── CsvViewer.tsx
+│   │   ├── ImageViewer.tsx
+│   │   ├── MarkdownShadow.tsx
+│   │   ├── RawEditor.tsx
+│   │   └── TextPreview.tsx
+│   ├── EditorPane.tsx
+│   ├── EmptyDropZone.tsx
+│   ├── ErrorBanner.tsx
+│   ├── FileTreePane.tsx
+│   ├── FolderSearchBar.tsx
+│   ├── inspector
+│   │   ├── ACLSection.tsx
+│   │   ├── CORSSection.tsx
+│   │   ├── DetailsSection.tsx
+│   │   ├── PolicySection.tsx
+│   │   └── TagsSection.tsx
+│   ├── InspectorPanel.tsx
+│   ├── LoadingOverlay.tsx
+│   ├── S3ConnectionDropdown.tsx
+│   ├── S3ConnectionForm.tsx
+│   ├── S3ConnectionManagerDialog.tsx
+│   ├── Sidebar.tsx
+│   └── Tooltip.tsx
+├── contexts
+│   ├── s3
+│   │   ├── api.ts
+│   │   ├── editor.ts
+│   │   ├── index.tsx
+│   │   ├── menu.ts
+│   │   └── types.ts
+│   └── S3ConnectionContext.tsx
+├── hooks
+│   └── useApi.ts
+└── styles
+    └── markdown.css
+
+11 directories, 41 files
+➜  s3explorer git:(main) ✗ 

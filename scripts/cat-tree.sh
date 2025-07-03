@@ -1,0 +1,1 @@
+tree -I 'node_modules' -a -f --sort=name > project_structure.txt && find . -type f \( -name "package.json" -o -name "tsconfig.json" -o -name ".gitignore" -o -name "README.md" \) -not -path "./node_modules/*" >> ai/tree.log
