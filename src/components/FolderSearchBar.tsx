@@ -1,4 +1,4 @@
-// src/components/PagingBar.tsx
+// src/components/FolderSearchBar.tsx
 'use client'
 
 import { useEffect, useRef } from 'react'
@@ -6,11 +6,11 @@ import { useS3 } from '@/contexts/s3'
 import { Search, X } from 'lucide-react'
 
 const SEARCH_MODES = [
-  { value: 'begins', label: 'Name begins with' },
-  { value: 'contains', label: 'Name contains' },
+  { value: 'begins', label: 'prefix' },
+  { value: 'contains', label: 'contains' },
 ]
 
-export default function PagingBar({
+export default function FolderSearchBar({
   search,
   setSearch,
   context,

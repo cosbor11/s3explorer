@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useS3 } from '@/contexts/s3'
 import useApi from '@/hooks/useApi'
 import EmptyDropZone from '@/components/EmptyDropZone'
-import PagingBar from './PagingBar'
+import FolderSearchBar from './FolderSearchBar'
 
 const MIN_W = 160
 const CHAR_PX = 8
@@ -214,7 +214,7 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
-      <PagingBar
+      <FolderSearchBar
         search={inputValue}
         setSearch={handleInputChange}
         context="files"
