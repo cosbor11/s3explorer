@@ -1,7 +1,7 @@
 // src/components/FileTreePane.tsx
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useS3 } from '@/contexts/s3'
 import useApi from '@/hooks/useApi'
 import EmptyDropZone from '@/components/EmptyDropZone'
@@ -16,8 +16,8 @@ const GREEN = 'text-[#4ec9b0]'
 const TEXT = 'text-[#d4d4d4]'
 
 interface FileTreePaneProps {
-  verticalMode?: boolean // true if bottom panel
-  fillMode?: boolean     // true if in main area and should fill width/height
+  verticalMode?: boolean
+  fillMode?: boolean
 }
 
 export default function FileTreePane({ verticalMode, fillMode }: FileTreePaneProps) {
@@ -37,9 +37,9 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     search,
     setSearch,
     searchMode,
+    setSearchMode,
     refreshCurrent,
     doRemoteSearch,
-    allLoaded,
     lastRemoteSearch,
     setLastRemoteSearch,
   } = useS3()
@@ -52,12 +52,14 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
   })
 
   const [inputValue, setInputValue] = useState(search)
-
   useEffect(() => {
     setInputValue(search)
   }, [search])
 
+  const containerRef = useRef<HTMLDivElement>(null)
+
   const [initialLoadDone, setInitialLoadDone] = useState(false)
+
   useEffect(() => {
     if (!selectedBucket) {
       setTree(null)
@@ -67,30 +69,29 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     if (!tree && !initialLoadDone) {
       const loadTree = async () => {
         const res = await api.GET(
-          `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&prefix=`
+          `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&prefix=${encodeURIComponent(currentPrefix || '')}`
         )
         if (res.ok) {
-          setTree(
-            (res.data?.CommonPrefixes ?? []).map((p: any) => ({
-              name: p.Prefix.replace(/\/$/, '').split('/').pop(),
-              fullKey: p.Prefix,
-              isDir: true,
-            })).concat(
-              (res.data?.Contents ?? [])
-                .filter((obj: any) => obj.Key !== '' && !obj.Key.endsWith('/'))
-                .map((obj: any) => ({
-                  name: obj.Key.split('/').pop(),
-                  fullKey: obj.Key,
-                  isDir: false,
-                }))
-            )
-          )
+          const prefixes = (res.data?.CommonPrefixes ?? []).map((p: any) => ({
+            name: p.Prefix.replace(/\/$/, '').split('/').pop(),
+            fullKey: p.Prefix,
+            isDir: true,
+          }))
+          const objects = (res.data?.Contents ?? [])
+            .filter((obj: any) => obj.Key !== '' && !obj.Key.endsWith('/'))
+            .map((obj: any) => ({
+              name: obj.Key.split('/').pop(),
+              fullKey: obj.Key,
+              isDir: false,
+            }))
+          setTree([...prefixes, ...objects])
+          setSearchMode(res.data?.IsTruncated ? 'begins' : 'contains')
         }
         setInitialLoadDone(true)
       }
       loadTree()
     }
-  }, [selectedBucket, tree, setTree, api, initialLoadDone])
+  }, [selectedBucket, tree, setTree, api, initialLoadDone, currentPrefix, setSearchMode])
 
   const onDrag = (e: React.MouseEvent) => {
     if (verticalMode || fillMode) return
@@ -143,43 +144,24 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
       refreshCurrent()
       return
     }
-    if (lastRemoteSearch !== `${inputValue}:${searchMode}`) {
-      setLastRemoteSearch(`${inputValue}:${searchMode}`)
-      doRemoteSearch(inputValue, searchMode)
-    }
-    if (!allLoaded && lastRemoteSearch !== `${inputValue}:${searchMode}`) {
-      setLastRemoteSearch(`${inputValue}:${searchMode}`)
-      doRemoteSearch(inputValue, searchMode)
+    if (searchMode === 'begins') {
+      if (lastRemoteSearch !== `${inputValue}:${searchMode}`) {
+        setLastRemoteSearch(`${inputValue}:${searchMode}`)
+        doRemoteSearch(inputValue, searchMode)
+      }
     }
   }
 
   const filteredTree =
-    !search.trim() || !allLoaded
+    !search.trim() || searchMode === 'begins'
       ? tree
       : tree?.filter(n =>
-          searchMode === 'begins'
-            ? n.name.toLowerCase().startsWith(search.trim().toLowerCase())
-            : searchMode === 'contains'
-            ? n.name.toLowerCase().includes(search.trim().toLowerCase())
-            : false
+          n.name.toLowerCase().includes(search.trim().toLowerCase())
         )
 
   const isSearch = !!search.trim()
   const isEmpty = !filteredTree || filteredTree.length === 0
   const isRoot = currentPrefix === '' || currentPrefix === undefined
-
-  const searchNoResults = (
-    <div className="flex flex-col items-center justify-center pt-12 pb-8 text-neutral-400 select-none">
-      <span className="text-sm">
-        No matches for files that {searchMode === 'begins'
-          ? 'begin with'
-          : searchMode === 'contains'
-            ? 'contain'
-            : 'have content matching'}&nbsp;
-        <span className="font-mono bg-[#1e1e1e] px-2 py-1 rounded">{search}</span>
-      </span>
-    </div>
-  )
 
   if (!selectedBucket) {
     return (
@@ -202,7 +184,9 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
 
   return (
     <div
-      className={`relative bg-[#232323]${verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'}`}
+      className={`relative bg-[#232323] flex flex-col${
+        verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
+      }`}
       style={
         verticalMode
           ? { width: '100%', height: '100%', minHeight: 80 }
@@ -222,7 +206,7 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
         onSearchClick={handleSearch}
         onClearClick={handleClearSearch}
       />
-      <div className="overflow-auto" style={{ height: 'calc(100% - 40px)' }}>
+      <div className="overflow-auto h-full" ref={containerRef}>
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
             <svg className="animate-spin h-7 w-7 text-[#3794ff]" viewBox="0 0 24 24">
@@ -242,9 +226,19 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
             </button>
           </div>
         )}
+
         {isEmpty ? (
           isSearch
-            ? searchNoResults
+            ? (
+              <div className="flex flex-col items-center justify-center pt-12 pb-8 text-neutral-400 select-none">
+                <span className="text-sm">
+                  No matches for files that {searchMode === 'begins'
+                    ? 'begin with'
+                    : 'contain'}&nbsp;
+                  <span className="font-mono bg-[#1e1e1e] px-2 py-1 rounded">{search}</span>
+                </span>
+              </div>
+            )
             : <EmptyDropZone
                 prefix={currentPrefix}
                 onFiles={files => uploadFiles(currentPrefix, files)}

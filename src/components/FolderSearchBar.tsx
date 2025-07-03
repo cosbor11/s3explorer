@@ -7,7 +7,7 @@ import { Search, X } from 'lucide-react'
 
 const SEARCH_MODES = [
   { value: 'begins', label: 'prefix' },
-  { value: 'contains', label: 'contains' },
+  { value: 'contains', label: 'filter' },
 ]
 
 export default function FolderSearchBar({
@@ -36,6 +36,11 @@ export default function FolderSearchBar({
     inputRef.current?.focus()
   }, [])
 
+  const placeholder =
+    searchMode === 'begins'
+      ? 'search in s3 (begins with)...'
+      : 'filter results..'
+
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between py-2 px-4 border-t border-neutral-800 text-xs bg-neutral-900/60 backdrop-blur pr-[1px]">
       {/* Search area: icon, input, clear, search button */}
@@ -45,7 +50,7 @@ export default function FolderSearchBar({
           ref={inputRef}
           type="search"
           className="bg-neutral-900 border border-neutral-700 px-2 py-1 rounded text-base w-full"
-          placeholder={`Search ${context ?? 'files/folders'}`}
+          placeholder={placeholder}
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={onSearchKeyDown}
