@@ -5,9 +5,9 @@ import Image from 'next/image'
 import { useMemo, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 
-const MIN_W = 180
+const MIN_W = 425 
 const CHAR_PX = 8
-const PADDING = 32
+const PADDING = 64
 
 export default function Sidebar() {
   const {

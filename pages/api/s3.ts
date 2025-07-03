@@ -11,7 +11,7 @@ import {
   HeadBucketCommand,
   GetBucketLocationCommand,
 } from '@aws-sdk/client-s3'
-import { getS3ClientFromRequest, getS3Client } from '@/clients/s3'
+import { getS3, getS3Client } from '@/clients/s3'
 import { S3Connection } from '@/contexts/S3ConnectionContext'
 
 /* ───────── helpers ───────── */
@@ -43,7 +43,7 @@ async function getRegionAdjustedClient(conn: S3Connection, bucket: string) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   console.log('api/s3 handler:', req.method, { query: req.query, body: req.body })
   try {
-    const s3 = getS3ClientFromRequest(req)
+    const s3 = getS3(req)
     const s3Conn = JSON.parse(req.headers['x-s3-session-token']?.toString() || '{}') as S3Connection
 
     if (req.method === 'GET') {

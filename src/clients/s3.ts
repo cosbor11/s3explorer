@@ -59,7 +59,7 @@ export function getS3ClientUsingCreds(
   })
 }
 
-export function getS3ClientFromRequest(req: NextApiRequest): S3Client {
+export function getS3(req: NextApiRequest): S3Client {
   const s3SessionToken = req.headers['x-s3-session-token']?.toString()
   if (!s3SessionToken) {
     throw new Error('Missing s3-session-token header')

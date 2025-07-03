@@ -5,7 +5,7 @@ import {
   GetBucketVersioningCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
-import { getS3ClientFromRequest } from '@/clients/s3'
+import { getS3 } from '@/clients/s3'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { bucket } = req.query
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const s3 = getS3ClientFromRequest(req)
+    const s3 = getS3(req)
 
     const [loc, versioning, list] = await Promise.all([
       s3.send(new GetBucketLocationCommand({ Bucket: String(bucket) })),

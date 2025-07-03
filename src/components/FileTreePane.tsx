@@ -1,25 +1,86 @@
+// src/components/FileTreePane.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useS3 } from '@/contexts/s3'
-import FileTree from '@/components/FileTree'
+import useApi from '@/hooks/useApi'
+import EmptyDropZone from '@/components/EmptyDropZone'
 
 const MIN_W = 160
 const CHAR_PX = 8
 const PADDING = 32
 
-export default function FileTreePane() {
-  const { tree } = useS3()
+const BLUE = 'text-[#3794ff]'
+const GREEN = 'text-[#4ec9b0]'
+const TEXT = 'text-[#d4d4d4]'
 
-  /* auto-fit initial width */
+interface FileTreePaneProps {
+  verticalMode?: boolean // true if bottom panel
+  fillMode?: boolean     // true if in main area and should fill width/height
+}
+
+export default function FileTreePane({ verticalMode, fillMode }: FileTreePaneProps) {
+  const {
+    selectedBucket,
+    tree,
+    setTree,
+    openPrefix,
+    openFile,
+    openMenu,
+    uploadFiles,
+    currentPrefix,
+    selectedFile,
+    loading,
+    error,
+    setError,
+  } = useS3()
+
+  const api = useApi()
   const [width, setWidth] = useState(() => {
     if (!tree) return 220
-    const longest = Math.max(10, ...tree.map(n => n.name.length))
+    const longest = Math.max(10, ...(tree ?? []).map(n => n.name.length))
     return Math.max(MIN_W, longest * CHAR_PX + PADDING)
   })
 
-  /* drag handle */
+  // Only load file tree when a bucket is selected
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
+  useEffect(() => {
+    if (!selectedBucket) {
+      setTree(null)
+      setInitialLoadDone(false)
+      return
+    }
+    if (!tree && !initialLoadDone) {
+      const loadTree = async () => {
+        const res = await api.GET(
+          `/api/s3?bucket=${encodeURIComponent(selectedBucket)}&prefix=`
+        )
+        if (res.ok) {
+          setTree(
+            (res.data?.CommonPrefixes ?? []).map((p: any) => ({
+              name: p.Prefix.replace(/\/$/, '').split('/').pop(),
+              fullKey: p.Prefix,
+              isDir: true,
+            })).concat(
+              (res.data?.Contents ?? [])
+                .filter((obj: any) => obj.Key !== '' && !obj.Key.endsWith('/'))
+                .map((obj: any) => ({
+                  name: obj.Key.split('/').pop(),
+                  fullKey: obj.Key,
+                  isDir: false,
+                }))
+            )
+          )
+        }
+        setInitialLoadDone(true)
+      }
+      loadTree()
+    }
+  }, [selectedBucket, tree, setTree, api, initialLoadDone])
+
+  // Drag handle logic (only active in sidebar mode)
   const onDrag = (e: React.MouseEvent) => {
+    if (verticalMode || fillMode) return
     e.preventDefault()
     const startX = e.clientX
     const startW = width
@@ -33,20 +94,183 @@ export default function FileTreePane() {
     window.addEventListener('mouseup', up)
   }
 
-  if (!tree) return null
+  const isActive = (n: { fullKey: string }) => selectedFile?.fullKey === n.fullKey
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      if (e.dataTransfer.files.length) {
+        uploadFiles(currentPrefix, e.dataTransfer.files)
+      }
+    },
+    [uploadFiles, currentPrefix]
+  )
+
+  function Spinner() {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+        <svg className="animate-spin h-7 w-7 text-[#3794ff]" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+        </svg>
+      </div>
+    )
+  }
+
+  function ErrorBanner({ msg }: { msg: string }) {
+    return (
+      <div className="absolute top-0 left-0 w-full px-4 py-2 bg-red-700 text-white text-xs z-50 flex items-center justify-between">
+        <span>{msg}</span>
+        <button
+          className="ml-4 px-2 py-1 rounded bg-red-800 hover:bg-red-900"
+          onClick={() => setError(null)}
+        >
+          Dismiss
+        </button>
+      </div>
+    )
+  }
+
+  // Don't render anything if no bucket selected
+  if (!selectedBucket) {
+    return (
+      <div
+        className={`relative bg-[#232323] flex items-center justify-center select-none${
+          verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
+        }`}
+        style={
+          verticalMode
+            ? { width: '100%', height: '100%', minHeight: 80 }
+            : fillMode
+              ? { width: '100%', minHeight: 100, height: '100%' }
+              : { width, minWidth: MIN_W, minHeight: 100 }
+        }
+      >
+        <span className="text-[#888] text-sm">Select a bucket to browse files</span>
+      </div>
+    )
+  }
+
+  if (!tree) {
+    return (
+      <div
+        className={`relative bg-[#232323] overflow-auto${
+          verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
+        }`}
+        style={
+          verticalMode
+            ? { width: '100%', height: '100%', minHeight: 80 }
+            : fillMode
+              ? { width: '100%', minHeight: 100, height: '100%' }
+              : { width, minWidth: MIN_W, minHeight: 100 }
+        }
+      >
+        {loading && <Spinner />}
+        {error && <ErrorBanner msg={error} />}
+      </div>
+    )
+  }
+
+  const isEmpty = tree.length === 0
+  const isRoot = currentPrefix === '' || currentPrefix === undefined
+  const emptyMsg = isRoot ? "This bucket is empty." : "This folder is empty."
 
   return (
     <div
-      className="relative bg-[#232323] border-r border-[#2d2d2d] overflow-auto"
-      style={{ width, minWidth: MIN_W }}
+      className={`relative bg-[#232323] overflow-auto${
+        verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
+      }`}
+      style={
+        verticalMode
+          ? { width: '100%', height: '100%', minHeight: 80 }
+          : fillMode
+            ? { width: '100%', minHeight: 100, height: '100%' }
+            : { width, minWidth: MIN_W }
+      }
+      onContextMenu={(e) => openMenu(e, 'emptyTree')}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
     >
-      <FileTree /> {/* ← your original tree UI */}
-
-      {/* drag handle (same look/hover as sidebar) */}
-      <div
-        className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
-        onMouseDown={onDrag}
-      />
+      {loading && <Spinner />}
+      {error && <ErrorBanner msg={error} />}
+      
+      {isEmpty ? (
+        <EmptyDropZone
+          prefix={currentPrefix}
+          onFiles={files => uploadFiles(currentPrefix, files)}
+          message={emptyMsg}
+          loading={loading}
+        />
+      ) : (
+        <ul className="w-full h-full overflow-auto px-6 py-4">
+          {tree.map((n) => (
+            <li key={n.fullKey}>
+              <div
+                className={`
+                  flex items-center gap-1 px-2 py-0.5 cursor-pointer select-none rounded
+                  hover:bg-[#232323] ${isActive(n) ? 'bg-[#333333]' : ''}
+                `}
+                onClick={() => (n.isDir ? openPrefix(n.fullKey) : openFile(n))}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  openMenu(e, n.isDir ? 'folder' : 'file', n)
+                }}
+              >
+                {n.isDir ? (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    className={`${BLUE} mr-1`}
+                  >
+                    <path
+                      fill="currentColor"
+                      d="M10.828 6H20a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4.828a1 1 0 0 0 .707-.293l1.172-1.172a2 2 0 0 1 1.414-.586z"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    className={`${GREEN} mr-1`}
+                    fill="none"
+                  >
+                    <path
+                      d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6Z"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                    />
+                    <path
+                      d="M14 2v4a2 2 0 0 0 2 2h4"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                    />
+                    <path
+                      d="M8 12h8M8 15h8"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+                <span className={n.isDir ? BLUE : TEXT}>
+                  {n.name}
+                  {n.isDir ? '/' : ''}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* Show width drag handle only in sidebar mode */}
+      {!verticalMode && !fillMode && (
+        <div
+          className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
+          onMouseDown={onDrag}
+        />
+      )}
     </div>
   )
 }
