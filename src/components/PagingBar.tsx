@@ -37,10 +37,10 @@ export default function PagingBar({
   }, [])
 
   return (
-    <div className="flex items-center justify-between py-2 px-4 border-t border-neutral-800 text-xs bg-neutral-900/60">
+    <div className="sticky top-0 z-40 flex items-center justify-between py-2 px-4 border-t border-neutral-800 text-xs bg-neutral-900/60 backdrop-blur pr-[1px]">
       {/* Search area: icon, input, clear, search button */}
       <div className="flex items-center gap-2 flex-1 max-w-lg">
-        <Search className=" h-full text-neutral-400" />
+        <Search className="h-full text-neutral-400" />
         <input
           ref={inputRef}
           type="search"
@@ -54,7 +54,8 @@ export default function PagingBar({
         {search && (
           <button
             aria-label="Clear search"
-            className="ml-2"
+            title="Clear search"
+            className="ml-2 cursor-pointer"
             tabIndex={0}
             onClick={onClearClick}
             type="button"
@@ -72,7 +73,7 @@ export default function PagingBar({
         </button>
       </div>
       {/* Search mode dropdown: far right */}
-      <div className="ml-4">
+      <div className="mx-4">
         <select
           className="bg-neutral-900 border border-neutral-800 px-2 py-1 rounded text-xs text-neutral-400 outline-none transition-colors"
           value={searchMode}
