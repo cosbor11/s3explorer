@@ -1,10 +1,11 @@
 // src/components/FileTreePane.tsx
 'use client'
 
-import { useState, useEffect, useCallback, ChangeEvent } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useS3 } from '@/contexts/s3'
 import useApi from '@/hooks/useApi'
 import EmptyDropZone from '@/components/EmptyDropZone'
+import PagingBar from './PagingBar'
 
 const MIN_W = 160
 const CHAR_PX = 8
@@ -33,6 +34,14 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     loading,
     error,
     setError,
+    search,
+    setSearch,
+    searchMode,
+    refreshCurrent,
+    doRemoteSearch,
+    allLoaded,
+    lastRemoteSearch,
+    setLastRemoteSearch,
   } = useS3()
 
   const api = useApi()
@@ -42,8 +51,13 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     return Math.max(MIN_W, longest * CHAR_PX + PADDING)
   })
 
-  // File/folder search state
-  const [search, setSearch] = useState('')
+  // Local search input state, so search bar is decoupled from context
+  const [inputValue, setInputValue] = useState(search)
+
+  // Keep input in sync with context search (when cleared externally)
+  useEffect(() => {
+    setInputValue(search)
+  }, [search])
 
   // Only load file tree when a bucket is selected
   const [initialLoadDone, setInitialLoadDone] = useState(false)
@@ -109,32 +123,64 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     [uploadFiles, currentPrefix]
   )
 
-  function Spinner() {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-        <svg className="animate-spin h-7 w-7 text-[#3794ff]" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-        </svg>
-      </div>
-    )
+  // ---- SEARCH HANDLERS ----
+
+  // Local input (no immediate search)
+  const handleInputChange = (value: string) => {
+    setInputValue(value)
   }
 
-  function ErrorBanner({ msg }: { msg: string }) {
-    return (
-      <div className="absolute top-0 left-0 w-full px-4 py-2 bg-red-700 text-white text-xs z-50 flex items-center justify-between">
-        <span>{msg}</span>
-        <button
-          className="ml-4 px-2 py-1 rounded bg-red-800 hover:bg-red-900"
-          onClick={() => setError(null)}
-        >
-          Dismiss
-        </button>
-      </div>
-    )
+  // Clear search: reset value, context, and reload all
+  const handleClearSearch = () => {
+    setInputValue('')
+    setSearch('')
+    setLastRemoteSearch('')
+    refreshCurrent()
   }
 
-  // Don't render anything if no bucket selected
+  // Enter triggers search
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }
+
+  // Search click or Enter will remote search only (not local)
+  const handleSearch = () => {
+    setSearch(inputValue)
+    // If search is empty, reload full listing (clear)
+    if (!inputValue.trim()) {
+      setLastRemoteSearch('')
+      refreshCurrent()
+      return
+    }
+    // Only do remote search, never local
+    setLastRemoteSearch(`${inputValue}:${searchMode}`)
+    doRemoteSearch(inputValue, searchMode)
+  }
+
+  // Always just use current tree (no local filter)
+  const filteredTree = tree
+
+  const isSearch = !!search.trim()
+  const isEmpty = !filteredTree || filteredTree.length === 0
+  const isRoot = currentPrefix === '' || currentPrefix === undefined
+
+  // Show special message for empty search result
+  const searchNoResults = (
+    <div className="flex flex-col items-center justify-center pt-12 pb-8 text-neutral-400 select-none">
+      <span className="text-sm">
+        No matches for files that {searchMode === 'begins'
+          ? 'begin with'
+          : searchMode === 'contains'
+            ? 'contain'
+            : 'have content matching'}&nbsp;
+        <span className="font-mono bg-[#1e1e1e] px-2 py-1 rounded">{search}</span>
+      </span>
+    </div>
+  )
+
+  // Don't render anything if no bucket selected (matches original)
   if (!selectedBucket) {
     return (
       <div
@@ -154,36 +200,6 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     )
   }
 
-  if (!tree) {
-    return (
-      <div
-        className={`relative bg-[#232323] overflow-auto${
-          verticalMode ? ' border-t border-[#2d2d2d]' : fillMode ? '' : ' border-r border-[#2d2d2d]'
-        }`}
-        style={
-          verticalMode
-            ? { width: '100%', height: '100%', minHeight: 80 }
-            : fillMode
-              ? { width: '100%', minHeight: 100, height: '100%' }
-              : { width, minWidth: MIN_W, minHeight: 100 }
-        }
-      >
-        {loading && <Spinner />}
-        {error && <ErrorBanner msg={error} />}
-      </div>
-    )
-  }
-
-  // Filter tree nodes by search string (applies to name only)
-  const filteredTree =
-    !search.trim()
-      ? tree
-      : tree.filter(n => n.name.toLowerCase().includes(search.trim().toLowerCase()))
-
-  const isEmpty = filteredTree.length === 0
-  const isRoot = currentPrefix === '' || currentPrefix === undefined
-  const emptyMsg = isRoot ? "This bucket is empty." : "This folder is empty."
-
   return (
     <div
       className={`relative bg-[#232323] overflow-auto${
@@ -200,31 +216,46 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
-      {loading && <Spinner />}
-      {error && <ErrorBanner msg={error} />}
-
-      {/* Search bar above tree */}
-      <div className="px-4 pt-2 pb-1">
-        <input
-          type="text"
-          value={search}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-          placeholder="Search files/folders…"
-          className="w-full bg-[#1a1a1a] border border-[#333] rounded px-2 py-1 text-xs text-[#d4d4d4] outline-none focus:border-[#3794ff]"
-          spellCheck={false}
-        />
-      </div>
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <svg className="animate-spin h-7 w-7 text-[#3794ff]" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+          </svg>
+        </div>
+      )}
+      {error && (
+        <div className="absolute top-0 left-0 w-full px-4 py-2 bg-red-700 text-white text-xs z-50 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            className="ml-4 px-2 py-1 rounded bg-red-800 hover:bg-red-900"
+            onClick={() => setError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      <PagingBar
+        search={inputValue}
+        setSearch={handleInputChange}
+        context="files"
+        onSearchKeyDown={handleSearchKeyDown}
+        onSearchClick={handleSearch}
+        onClearClick={handleClearSearch}
+      />
 
       {isEmpty ? (
-        <EmptyDropZone
-          prefix={currentPrefix}
-          onFiles={files => uploadFiles(currentPrefix, files)}
-          message={emptyMsg}
-          loading={loading}
-        />
+        isSearch
+          ? searchNoResults
+          : <EmptyDropZone
+              prefix={currentPrefix}
+              onFiles={files => uploadFiles(currentPrefix, files)}
+              message={isRoot ? "This bucket is empty." : "This folder is empty."}
+              loading={loading}
+            />
       ) : (
         <ul className="w-full h-full overflow-auto px-6 py-4">
-          {filteredTree.map((n) => (
+          {filteredTree!.map((n) => (
             <li key={n.fullKey}>
               <div
                 className={`

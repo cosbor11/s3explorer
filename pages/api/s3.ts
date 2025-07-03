@@ -47,9 +47,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const s3Conn = JSON.parse(req.headers['x-s3-session-token']?.toString() || '{}') as S3Connection
 
     if (req.method === 'GET') {
-      const { bucket, prefix, key } = req.query
-      console.log('api/s3 GET', { bucket, prefix, key })
+      const { bucket, prefix, key, search, searchMode } = req.query
 
+      // Log search-related parameters
+      if (bucket) {
+        const maxKeys = req.query.maxKeys
+        const continuationToken = req.query.continuationToken
+        console.log(
+          '[api/s3] GET ListObjects',
+          JSON.stringify({
+            bucket,
+            prefix,
+            maxKeys,
+            continuationToken,
+            search,
+            searchMode,
+          })
+        )
+      }
+
+      // Key download
       if (key && bucket) {
         const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
         const obj = await adjustedClient.send(
@@ -66,6 +83,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return ok(res, { body })
       }
 
+      // Remote search handling
+      if (bucket && search && searchMode) {
+        const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
+        if (searchMode === 'begins') {
+          // Use Prefix for begins with
+          const objs = await adjustedClient.send(
+            new ListObjectsV2Command({
+              Bucket: String(bucket),
+              Prefix: String(search),
+              Delimiter: '/',
+            })
+          )
+          return ok(res, objs)
+        }
+
+        if (searchMode === 'contains') {
+          // Paginate and filter for contains (not efficient for large buckets)
+          let allObjects: any[] = []
+          let continuationToken: string | undefined = undefined
+          let isTruncated = true
+          while (isTruncated) {
+            const objs = await adjustedClient.send(
+              new ListObjectsV2Command({
+                Bucket: String(bucket),
+                ContinuationToken: continuationToken,
+              })
+            )
+            allObjects = allObjects.concat(
+              (objs.Contents ?? []).filter(obj =>
+                obj.Key?.toLowerCase().includes(String(search).toLowerCase())
+              )
+            )
+            isTruncated = objs.IsTruncated
+            continuationToken = objs.NextContinuationToken
+            // Hard limit to avoid huge fetches
+            if (allObjects.length > 1000) break
+          }
+          return ok(res, {
+            Contents: allObjects,
+            CommonPrefixes: [],
+            IsTruncated: false,
+          })
+        }
+        // fallback
+        return ok(res, { Contents: [], CommonPrefixes: [], IsTruncated: false })
+      }
+
+      // Regular listing
       if (bucket) {
         const adjustedClient = await getRegionAdjustedClient(s3Conn, String(bucket))
         const objs = await adjustedClient.send(
@@ -73,11 +138,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             Bucket: String(bucket),
             Prefix: prefix ? String(prefix) : undefined,
             Delimiter: '/',
+            MaxKeys: req.query.maxKeys ? Number(req.query.maxKeys) : undefined,
+            ContinuationToken: req.query.continuationToken
+              ? String(req.query.continuationToken)
+              : undefined,
           })
         )
         return ok(res, objs)
       }
 
+      // List buckets
       const bs = await s3.send(new ListBucketsCommand({}))
       return ok(res, bs)
     }

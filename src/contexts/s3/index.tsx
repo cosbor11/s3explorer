@@ -1,7 +1,7 @@
 // src/contexts/s3/index.tsx
 'use client'
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -17,6 +17,7 @@ import type {
   MenuState,
   MenuType,
   S3ContextState,
+  SearchMode,
 } from './types'
 import { Buffer } from 'buffer'
 import useApi from '@/hooks/useApi'
@@ -58,6 +59,20 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     type: 'emptySidebar',
   })
 
+  // Paging state
+  const [pageSize, setPageSize] = useState<number>(100)
+  const [continuationToken, setContinuationToken] = useState<string | null>(null)
+  const [nextContinuationToken, setNextContinuationToken] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [prevTokens, setPrevTokens] = useState<string[]>([])
+
+  // Search state
+  const [search, setSearch] = useState('')
+  const [searchMode, setSearchMode] = useState<SearchMode>('begins')
+  const [allLoaded, setAllLoaded] = useState(true)
+  const [lastRemoteSearch, setLastRemoteSearch] = useState('')
+
   const dirty = editedContent !== originalContent
   const _resetEditor = () =>
     resetEditor({
@@ -73,13 +88,9 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     setLoading(true)
     api.GET('/api/s3')
       .then((d) => {
-        console.log('Buckets API response:', d)
         setBuckets(d.data?.Buckets?.map((b: any) => b.Name!) ?? [])
       })
-      .catch((e) => {
-        console.error('Buckets API error:', e)
-        setError(e.message)
-      })
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }
 
@@ -122,9 +133,21 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     setTree(null)
     setSelectedFile(null)
     _resetEditor()
+    setContinuationToken(null)
+    setCurrentPage(1)
+    setPrevTokens([])
+    setSearch('')
+    setLastRemoteSearch('')
+    setAllLoaded(true)
   }
 
-  const openPrefix = (prefix: string) => {
+  // Paging-aware openPrefix
+  const openPrefix = (
+    prefix: string,
+    contToken: string | null = null,
+    customPageSize: number | null = null,
+    replacePrevStack: boolean = false
+  ) => {
     if (!selectedBucket) return
     if (!confirmDiscard()) return
 
@@ -132,20 +155,84 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     setError(null)
     setCurrentPrefix(prefix)
 
-    api.GET(
-      `/api/s3?bucket=${encodeURIComponent(
-        selectedBucket
-      )}&prefix=${encodeURIComponent(prefix)}`
-    )
+    const params = new URLSearchParams()
+    params.append('bucket', selectedBucket)
+    params.append('prefix', prefix)
+    params.append('maxKeys', String(customPageSize ?? pageSize))
+    if (contToken) params.append('continuationToken', contToken)
+
+    api.GET(`/api/s3?${params.toString()}`)
       .then((d) => {
-        console.log('Prefix API response:', d)
         setTree(buildTree(prefix, d.data))
         setBreadcrumb(prefix ? prefix.replace(/\/$/, '').split('/') : [])
         setSelectedFile(null)
         _resetEditor()
+
+        setContinuationToken(contToken ?? null)
+        setNextContinuationToken(d.data?.NextContinuationToken ?? null)
+        setHasMore(Boolean(d.data?.IsTruncated))
+        setAllLoaded(!d.data?.IsTruncated)
+
+        if (contToken && !replacePrevStack) {
+          setPrevTokens((prev) => [...prev, contToken])
+        } else if (replacePrevStack) {
+          setPrevTokens([])
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
+  }
+
+  // Paging controls
+  const nextPage = () => {
+    if (!hasMore || !nextContinuationToken) return
+    setCurrentPage((p) => p + 1)
+    openPrefix(currentPrefix, nextContinuationToken)
+  }
+
+  const prevPage = () => {
+    if (currentPage <= 1) return
+    setCurrentPage((p) => Math.max(1, p - 1))
+    setPrevTokens((prev) => {
+      const next = [...prev]
+      next.pop()
+      return next
+    })
+    const prevToken = prevTokens.length > 1 ? prevTokens[prevTokens.length - 2] : null
+    openPrefix(currentPrefix, prevToken, null, prevToken == null)
+  }
+
+  const setPageSizeAndReload = (size: number) => {
+    setPageSize(size)
+    setCurrentPage(1)
+    setContinuationToken(null)
+    setPrevTokens([])
+    openPrefix(currentPrefix, null, size, true)
+  }
+
+  // ---- SEARCH LOGIC ----
+  const doRemoteSearch = async (query: string, mode: SearchMode) => {
+    if (!selectedBucket) return
+    setLoading(true)
+    setError(null)
+    try {
+      // Only name searches are supported remotely
+      const params = new URLSearchParams()
+      params.append('bucket', selectedBucket)
+      params.append('prefix', currentPrefix)
+      params.append('search', query)
+      params.append('searchMode', mode)
+      params.append('maxKeys', String(pageSize))
+      // Note: continuationToken for paged remote search not implemented
+
+      const d = await api.GET(`/api/s3?${params.toString()}`)
+      setTree(buildTree(currentPrefix, d.data))
+      setAllLoaded(!d.data?.IsTruncated)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const openFile = (n: S3Node) => {
@@ -390,8 +477,7 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
   }
 
   const refreshCurrent = () => {
-    if (selectedFile) openFile(selectedFile)
-    else openPrefix(currentPrefix)
+    openPrefix(currentPrefix, continuationToken)
   }
 
   const openMenu = (
@@ -434,6 +520,11 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     error,
     dirty,
     menu,
+    pageSize,
+    setPageSize: setPageSizeAndReload,
+    continuationToken,
+    hasMore,
+    currentPage,
     fetchBuckets,
     openPrefix,
     openFile,
@@ -455,6 +546,17 @@ export const S3Provider = ({ children }: { children: ReactNode }) => {
     setError,
     openMenu,
     closeMenu,
+    nextPage,
+    prevPage,
+    // Search state
+    search,
+    setSearch,
+    searchMode,
+    setSearchMode,
+    allLoaded,
+    lastRemoteSearch,
+    setLastRemoteSearch,
+    doRemoteSearch,
   }
 
   return <S3Context.Provider value={value}>{children}</S3Context.Provider>

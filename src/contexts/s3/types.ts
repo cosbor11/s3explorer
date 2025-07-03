@@ -24,6 +24,8 @@ export interface MenuState {
   node?: S3Node
 }
 
+export type SearchMode = 'begins' | 'contains' | 'content'
+
 export interface S3ContextState {
   /* data */
   buckets: string[]
@@ -42,9 +44,28 @@ export interface S3ContextState {
   dirty: boolean
   menu: MenuState
 
+  /* paging */
+  pageSize: number
+  setPageSize(size: number): void
+  continuationToken: string | null
+  hasMore: boolean
+  currentPage: number
+  nextPage(): void
+  prevPage(): void
+
+  /* search state */
+  search: string
+  setSearch(s: string): void
+  searchMode: SearchMode
+  setSearchMode(mode: SearchMode): void
+  allLoaded: boolean
+  lastRemoteSearch: string
+  setLastRemoteSearch(s: string): void
+  doRemoteSearch: (search: string, mode: SearchMode) => void
+
   /* actions */
   fetchBuckets(): void
-  openPrefix(prefix: string): void
+  openPrefix(prefix: string, contToken?: string | null, customPageSize?: number | null, replacePrevStack?: boolean): void
   openFile(n: S3Node): void
   startNewFile(prefix: string): void
   setWrap(v: boolean): void

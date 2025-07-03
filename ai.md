@@ -373,5 +373,7 @@ return res.status(400).json({ ok: false, error: { code, message } })
 
 
 **Important**
-
-Always provide full updated file (unless it is only one line of code updated). I want to be able to paste the file and run. cat
+ - ALWAYS RESPOND WITH ENTIRE UPDATED DROP IN PLACE FILE(s). 
+ - ONLY RESPOND WITH THE UPDATED FILES. IF A FILE IS UNCHANGED DONT INCLUDE IT IN THE RESPONSE. ALWAYS INCLUDE ALL FILES CHANGED. 
+ - DONT EVER USE PLACEHOLDERS FOR CODE
+ - NEVER REMOVE OR CHANGE EXISTING FUNCTIONALITY OUTSIDE OF SCOPE 
