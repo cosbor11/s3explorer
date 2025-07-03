@@ -16,8 +16,8 @@ const GREEN = 'text-[#4ec9b0]'
 const TEXT = 'text-[#d4d4d4]'
 
 interface FileTreePaneProps {
-  verticalMode?: boolean // true if bottom panel
-  fillMode?: boolean     // true if in main area and should fill width/height
+  verticalMode?: boolean
+  fillMode?: boolean
 }
 
 export default function FileTreePane({ verticalMode, fillMode }: FileTreePaneProps) {
@@ -51,15 +51,18 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     return Math.max(MIN_W, longest * CHAR_PX + PADDING)
   })
 
-  // Local search input state, so search bar is decoupled from context
   const [inputValue, setInputValue] = useState(search)
 
-  // Keep input in sync with context search (when cleared externally)
   useEffect(() => {
     setInputValue(search)
   }, [search])
 
-  // Only load file tree when a bucket is selected
+  useEffect(() => {
+    setInputValue('')
+    setSearch('')
+    setLastRemoteSearch('')
+  }, [currentPrefix])
+
   const [initialLoadDone, setInitialLoadDone] = useState(false)
   useEffect(() => {
     if (!selectedBucket) {
@@ -95,7 +98,6 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     }
   }, [selectedBucket, tree, setTree, api, initialLoadDone])
 
-  // Drag handle logic (only active in sidebar mode)
   const onDrag = (e: React.MouseEvent) => {
     if (verticalMode || fillMode) return
     e.preventDefault()
@@ -123,14 +125,10 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     [uploadFiles, currentPrefix]
   )
 
-  // ---- SEARCH HANDLERS ----
-
-  // Local input (no immediate search)
   const handleInputChange = (value: string) => {
     setInputValue(value)
   }
 
-  // Clear search: reset value, context, and reload all
   const handleClearSearch = () => {
     setInputValue('')
     setSearch('')
@@ -138,35 +136,41 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     refreshCurrent()
   }
 
-  // Enter triggers search
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSearch()
     }
   }
 
-  // Search click or Enter will remote search only (not local)
   const handleSearch = () => {
     setSearch(inputValue)
-    // If search is empty, reload full listing (clear)
     if (!inputValue.trim()) {
       setLastRemoteSearch('')
       refreshCurrent()
       return
     }
-    // Only do remote search, never local
-    setLastRemoteSearch(`${inputValue}:${searchMode}`)
-    doRemoteSearch(inputValue, searchMode)
+    const key = `${inputValue}:${searchMode}:${currentPrefix || ''}`
+    if (lastRemoteSearch !== key) {
+      setLastRemoteSearch(key)
+      doRemoteSearch(inputValue, searchMode, currentPrefix)
+    }
   }
 
-  // Always just use current tree (no local filter)
-  const filteredTree = tree
+  const filteredTree =
+    !search.trim() || !allLoaded
+      ? tree
+      : tree?.filter(n =>
+          searchMode === 'begins'
+            ? n.name.toLowerCase().startsWith(search.trim().toLowerCase())
+            : searchMode === 'contains'
+            ? n.name.toLowerCase().includes(search.trim().toLowerCase())
+            : false
+        )
 
   const isSearch = !!search.trim()
   const isEmpty = !filteredTree || filteredTree.length === 0
   const isRoot = currentPrefix === '' || currentPrefix === undefined
 
-  // Show special message for empty search result
   const searchNoResults = (
     <div className="flex flex-col items-center justify-center pt-12 pb-8 text-neutral-400 select-none">
       <span className="text-sm">
@@ -180,7 +184,6 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
     </div>
   )
 
-  // Don't render anything if no bucket selected (matches original)
   if (!selectedBucket) {
     return (
       <div
@@ -316,7 +319,6 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
           ))}
         </ul>
       )}
-      {/* Show width drag handle only in sidebar mode */}
       {!verticalMode && !fillMode && (
         <div
           className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"

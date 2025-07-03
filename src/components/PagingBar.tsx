@@ -38,8 +38,9 @@ export default function PagingBar({
 
   return (
     <div className="flex items-center justify-between py-2 px-4 border-t border-neutral-800 text-xs bg-neutral-900/60">
+      {/* Search area: icon, input, clear, search button */}
       <div className="flex items-center gap-2 flex-1 max-w-lg">
-        <Search className="w-4 h-4 text-neutral-400" />
+        <Search className=" h-full text-neutral-400" />
         <input
           ref={inputRef}
           type="search"
@@ -57,31 +58,34 @@ export default function PagingBar({
             tabIndex={0}
             onClick={onClearClick}
             type="button"
-            style={{ cursor: 'pointer' }}
           >
             <X className="w-4 h-4 text-neutral-400" />
           </button>
         )}
+        <button
+          className="ml-2 px-3 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm cursor-pointer"
+          type="button"
+          onClick={onSearchClick}
+          disabled={loading}
+        >
+          Search
+        </button>
+      </div>
+      {/* Search mode dropdown: far right */}
+      <div className="ml-4">
         <select
-          className="bg-neutral-900 border border-neutral-700 px-2 py-1 rounded text-xs ml-2"
+          className="bg-neutral-900 border border-neutral-800 px-2 py-1 rounded text-xs text-neutral-400 outline-none transition-colors"
           value={searchMode}
           onChange={e => setSearchMode(e.target.value as any)}
           disabled={loading}
         >
           {SEARCH_MODES.map(mode => (
-            <option key={mode.value} value={mode.value}>{mode.label}</option>
+            <option key={mode.value} value={mode.value}>
+              {mode.label}
+            </option>
           ))}
         </select>
       </div>
-      <button
-        className="ml-4 px-3 py-1 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm flex items-center gap-1"
-        type="button"
-        onClick={onSearchClick}
-        disabled={loading}
-        style={{ cursor: loading ? 'default' : 'pointer' }}
-      >
-        <Search className="w-4 h-4" /> Search
-      </button>
     </div>
   )
 }
