@@ -173,8 +173,7 @@ export default function ACLSection() {
         headers: { 'Content-Type': 'application/json' },
         body,
       })
-      const json = await res.json()
-      if (!json.ok) throw new Error(json.error?.message ?? 'Failed to save ACL')
+      if (!res.ok) throw new Error(res.error?.message ?? 'Failed to save ACL')
 
       const newText = viewMode === 'form'
         ? getAclJson(owner, cannedAcl ? CANNED_PREVIEWS[cannedAcl] || [] : grants)

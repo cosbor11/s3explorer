@@ -207,8 +207,7 @@ export default function PolicySection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, policy: JSON.parse(policy) }),
       })
-      const json = await res.json()
-      if (!json.ok) throw new Error(json.error?.message ?? 'Failed to save policy')
+      if (!res.ok) throw new Error(res.error?.message ?? 'Failed to save policy')
       setOriginal(policy)
       setJustSaved(true)
     } catch (e: any) {

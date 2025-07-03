@@ -91,7 +91,7 @@ export default function TagsSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket: selectedBucket, key: selectedFile?.fullKey, tags: cleaned }),
       })
-      if (!json.ok) throw new Error(json.error?.message ?? 'Failed to save tags')
+      if (!res.ok) throw new Error(res.error?.message ?? 'Failed to save tags')
       setSavedMessage(true)
       setTimeout(() => setSavedMessage(false), 2000)
     } catch (e: any) {
