@@ -19,7 +19,6 @@ export default function EditorPane() {
 
   const ext = selectedFile?.name.split('.').pop()?.toLowerCase()
   let content: JSX.Element
-
   if (!isNewFile && ext && CSV_EXT.includes(ext) && mode === 'preview') {
     content = <CsvViewer onEdit={() => setMode('raw')} />
   } else if (!isNewFile && (ext === 'md' || ext === 'markdown') && mode === 'preview') {

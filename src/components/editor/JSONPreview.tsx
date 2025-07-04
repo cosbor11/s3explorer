@@ -9,177 +9,111 @@ interface JSONPreviewProps {
   onEdit: () => void
 }
 
-const ExpandCollapseContext = createContext<{ expandLevel: number }>({ expandLevel: 0 })
+/* ---------- Helpers ---------- */
+const ExpandCtx = createContext<{ lvl: number }>({ lvl: 0 })
+const isObj = (v: any): v is Record<string, unknown> => v && typeof v === 'object'
+const depthOf = (d: any, dep = 0): number =>
+  !isObj(d)
+    ? dep
+    : Array.isArray(d)
+      ? d.reduce((m, v) => Math.max(m, depthOf(v, dep + 1)), dep)
+      : Object.values(d).reduce((m, v) => Math.max(m, depthOf(v, dep + 1)), dep)
 
-const isObject = (val: any) => val && typeof val === 'object'
+/* ---------- Recursive renderer ---------- */
+const Node: React.FC<{ n: string | null; d: any; dep?: number; last?: boolean }> = ({ n, d, dep = 0, last = true }) => {
+  const { lvl } = useContext(ExpandCtx)
+  const [col, setCol] = useState(dep > lvl)
+  useEffect(() => setCol(dep > lvl), [dep, lvl])
 
-type JsonData = any
+  const toggle = () => setCol(p => !p)
+  const pad = dep * 16
 
-// Compute maximum nesting depth of JSON
-const computeMaxDepth = (data: JsonData, depth = 0): number => {
-  if (!isObject(data)) return depth
-  let max = depth
-  if (Array.isArray(data)) {
-    data.forEach(item => {
-      const d = computeMaxDepth(item, depth + 1)
-      if (d > max) max = d
-    })
-  } else {
-    Object.values(data).forEach(val => {
-      const d = computeMaxDepth(val, depth + 1)
-      if (d > max) max = d
-    })
-  }
-  return max
-}
+  if (Array.isArray(d)) return (
+    <div>
+      <div style={{ marginLeft: pad, display: 'flex', alignItems: 'center', whiteSpace: 'pre' }}>
+        <button onClick={toggle} className="flex-none text-yellow-400 opacity-70 focus:outline-none">{col ? <Plus size={12} /> : <Minus size={12} />}</button>
+        <span>{n !== null ? `"${n}": ` : ''}{col ? '[ … ]' : '['}</span>
+      </div>
+      {!col && d.map((v, i) => (
+        <Node key={i} n={null} d={v} dep={dep + 1} last={i === d.length - 1} />
+      ))}
+      {!col && <div style={{ marginLeft: pad, whiteSpace: 'pre' }}>{']'}{!last && ','}</div>}
+    </div>
+  )
 
-// Recursive component to render JSON nodes
-const JSONNode: React.FC<{ name: string | null; data: JsonData; depth?: number; isLast?: boolean }> = ({ name, data, depth = 0, isLast = true }) => {
-  const [collapsed, setCollapsed] = useState(false)
-  const { expandLevel } = useContext(ExpandCollapseContext)
-
-  useEffect(() => {
-    setCollapsed(depth > expandLevel)
-  }, [depth, expandLevel])
-
-  const toggle = () => setCollapsed(prev => !prev)
-  const indent = depth * 16
-  const pad = ' '.repeat(depth * 2)
-
-  if (Array.isArray(data)) {
+  if (isObj(d)) {
+    const ks = Object.keys(d)
     return (
       <div>
-        <div style={{ marginLeft: indent, display: 'flex', alignItems: 'center', whiteSpace: 'pre' }}>
-          <button onClick={toggle} className="flex-none text-yellow-400 cursor-pointer focus:outline-none opacity-70">
-            {collapsed ? <Plus size={12} /> : <Minus size={12} />}
-          </button>
-          <span>{pad}{name !== null ? `"${name}": ` : ''}{collapsed ? `[ ... ]` : `[`}</span>
+        <div style={{ marginLeft: pad, display: 'flex', alignItems: 'center', whiteSpace: 'pre' }}>
+          <button onClick={toggle} className="flex-none text-yellow-400 opacity-70 focus:outline-none">{col ? <Plus size={12} /> : <Minus size={12} />}</button>
+          <span>{n !== null ? `"${n}": ` : ''}{col ? '{ … }' : '{'}</span>
         </div>
-        {!collapsed && data.map((item, idx) => (
-          <JSONNode key={idx} name={null} data={item} depth={depth + 1} isLast={idx === data.length - 1} />
+        {!col && ks.map((k, i) => (
+          <Node key={k} n={k} d={(d as any)[k]} dep={dep + 1} last={i === ks.length - 1} />
         ))}
-        {!collapsed && <div style={{ marginLeft: indent, whiteSpace: 'pre' }}>{pad}]{!isLast && ','}</div>}
+        {!col && <div style={{ marginLeft: pad, whiteSpace: 'pre' }}>{'}'}{!last && ','}</div>}
       </div>
     )
-  } else if (isObject(data)) {
-    const keys = Object.keys(data)
-    return (
-      <div>
-        <div style={{ marginLeft: indent, display: 'flex', alignItems: 'center', whiteSpace: 'pre' }}>
-          <button onClick={toggle} className="flex-none text-yellow-400 cursor-pointer focus:outline-none opacity-70">
-            {collapsed ? <Plus size={12} /> : <Minus size={12} />}
-          </button>
-          <span>{pad}{name !== null ? `"${name}": ` : ''}{collapsed ? `{ ... }` : `{`}</span>
-        </div>
-        {!collapsed && keys.map((key, idx) => (
-          <JSONNode key={key} name={key} data={data[key]} depth={depth + 1} isLast={idx === keys.length - 1} />
-        ))}
-        {!collapsed && <div style={{ marginLeft: indent, whiteSpace: 'pre' }}>{pad}}{!isLast && ','}</div>}
-      </div>
-    )
-  } else {
-    const display = typeof data === 'string' ? `"${data}"` : String(data)
-    return <div style={{ marginLeft: indent, whiteSpace: 'pre' }}>{pad}{name !== null ? `"${name}": ` : ''}{display}{!isLast && ','}</div>
   }
+
+  const vStr = typeof d === 'string' ? `"${d}"` : String(d)
+  return <div style={{ marginLeft: pad, whiteSpace: 'pre', wordBreak: 'break-all' }}>{n !== null ? `"${n}": ` : ''}{vStr}{!last && ','}</div>
 }
 
-const JSONPreview: React.FC<JSONPreviewProps> = ({ onEdit }) => {
+/* ---------- Main ---------- */
+export default function JSONPreview({ onEdit }: JSONPreviewProps) {
   const { editedContent } = useS3()
+  let json: any = null, parseErr = ''
+  try { json = JSON.parse(editedContent || '') } catch (e: any) { parseErr = e.message }
 
-  // Parse JSON content
-  let json: JsonData = null
-  let parseError = false
-  let errorMessage = ''
-  try {
-    json = JSON.parse(editedContent || '')
-  } catch (e: any) {
-    parseError = true
-    errorMessage = e.message
-  }
+  const max = useMemo(() => parseErr ? 0 : depthOf(json), [json, parseErr])
+  const [lvl, setLvl] = useState(max)
+  useEffect(() => setLvl(max), [max])
+  const levels = [...Array(max + 1).keys()]
 
-  // Compute and manage expand/collapse state
-  const maxDepth = useMemo(() => (parseError ? 0 : computeMaxDepth(json)), [json, parseError])
-  const [expandLevel, setExpandLevel] = useState(maxDepth)
-  useEffect(() => { setExpandLevel(maxDepth) }, [maxDepth])
-
-  const levels = Array.from({ length: maxDepth + 1 }, (_, i) => i)
-  const toggleAll = () => setExpandLevel(prev => (prev === maxDepth ? 0 : maxDepth))
-  const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => setExpandLevel(parseInt(e.target.value, 10))
-
-  // Highlight error line in raw JSON
-  let errorLine = -1
-  if (parseError) {
-    const match = errorMessage.match(/position (\d+)/)
-    if (match) {
-      const pos = parseInt(match[1], 10)
-      let cum = 0
-      const lines = editedContent.split('\n')
-      for (let i = 0; i < lines.length; i++) {
-        cum += lines[i].length + 1
-        if (cum > pos) { errorLine = i; break }
-      }
+  // locate error line
+  let errLine = -1
+  if (parseErr) {
+    const m = parseErr.match(/position (\d+)/)
+    if (m) {
+      let p = +m[1], acc = 0
+      editedContent.split('\n').some((l, i) => (acc += l.length + 1) > p && (errLine = i, true))
     }
   }
 
   return (
-    <ExpandCollapseContext.Provider value={{ expandLevel }}>
-      <div className="flex-1 flex flex-col min-h-0">
-        {/* Toolbar */}
-        <div className="px-3 py-2 bg-[#181818] border-b border-[#2d2d2d] text-xs flex items-center justify-between">
-          {/* Title & status */}
-          <div className="flex items-center space-x-2">
-            <span className="text-gray-400">JSON Preview</span>
-            {parseError ? <XCircle className="text-red-500 opacity-60" size={14} /> : <Check className="text-green-500 opacity-60" size={14} />}
-          </div>
-          {/* Controls */}
-          <div className="flex items-center space-x-1">
-            <select
-              value={expandLevel}
-              onChange={handleLevelChange}
-              disabled={parseError}
-              className="bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs px-2 py-0.5"
-            >
-              {levels.map(level => (
-                <option key={level} value={level}>{level === 0 ? 'None' : `Level ${level}`}</option>
-              ))}
-            </select>
-            <button
-              onClick={toggleAll}
-              disabled={parseError}
-              className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
-            >{expandLevel === maxDepth ? 'Collapse All' : 'Expand All'}</button>
-            <button
-              onClick={onEdit}
-              className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
-            >Edit raw</button>
-          </div>
-        </div>
-        {/* Error banner + raw highlight */}
-        {parseError && (
-          <div>
-            <div className="bg-red-700 text-red-100 p-2 text-xs">{errorMessage}</div>
-            <div className="overflow-auto bg-[#1e1e1e] p-2 font-mono text-sm text-[#d4d4d4]">
-              {editedContent.split('\n').map((line, idx) => (
-                <div
-                  key={idx}
-                  className={idx === errorLine ? 'bg-red-600' : ''}
-                  style={{ whiteSpace: 'pre' }}
-                >
-                  <span className="opacity-50">{String(idx + 1).padStart(3, ' ')} </span>{line}
-                </div>
-              ))}
+    <ExpandCtx.Provider value={{ lvl }}>
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <div className="flex-1 min-w-0 overflow-auto">
+          {/* Toolbar */}
+          <div className="sticky top-0 z-10 bg-[#181818] border-b border-[#2d2d2d] w-full px-3 py-2 text-xs flex items-center justify-between">
+            <div className="flex items-center space-x-2"><span className="text-gray-400">JSON Preview</span>{parseErr ? <XCircle size={14} className="text-red-500 opacity-60" /> : <Check size={14} className="text-green-500 opacity-60" />}</div>
+            <div className="flex items-center space-x-1">
+              <select value={lvl} onChange={e => setLvl(+e.target.value)} disabled={!!parseErr} className="bg-[#232323] border border-[#3a3a3a] rounded text-xs px-2 py-0.5 text-gray-200">
+                {levels.map(l => <option key={l} value={l}>{l === 0 ? 'None' : `Level ${l}`}</option>)}
+              </select>
+              <button onClick={() => setLvl(lvl === max ? 0 : max)} disabled={!!parseErr} className="px-2 py-0.5 bg-[#232323] border border-[#3a3a3a] rounded text-xs text-gray-200">{lvl === max ? 'Collapse All' : 'Expand All'}</button>
+              <button onClick={onEdit} className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-xs text-gray-200">Edit raw</button>
             </div>
           </div>
-        )}
-        {/* Preview area */}
-        {!parseError && (
-          <div className="flex-1 overflow-auto bg-[#1e1e1e] p-4 font-mono text-sm text-[#d4d4d4]">
-            <JSONNode name={null} data={json} depth={0} isLast={true} />
-          </div>
-        )}
+
+          {/* Content */}
+          {parseErr ? (
+            <div>
+              <div className="bg-red-700 text-red-100 p-2 text-xs">{parseErr}</div>
+              <pre className="overflow-auto bg-[#1e1e1e] p-2 text-sm text-[#d4d4d4]">{editedContent.split('\n').map((l, i) => (
+                <div key={i} className={i === errLine ? 'bg-red-600' : ''}><span className="opacity-50 mr-1">{String(i + 1).padStart(3, ' ')}</span>{l}</div>))}</pre>
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 overflow-auto bg-[#1e1e1e]">
+              <div className="min-w-max px-4 py-2 font-mono text-sm text-[#d4d4d4] whitespace-pre break-all">
+                <Node n={null} d={json} dep={0} last={true} />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </ExpandCollapseContext.Provider>
+    </ExpandCtx.Provider>
   )
 }
-
-export default JSONPreview

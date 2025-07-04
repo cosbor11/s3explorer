@@ -18,7 +18,7 @@ export default function S3ConnectionDropdown() {
   return (
     <>
       <Tooltip label="Select S3 connection">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mx-2">
           <select
             className="bg-[#232323] border border-[#333] text-sm text-white px-2 py-1 rounded cursor-pointer hover:bg-[#2a2a2a]"
             value={selected?.id ?? ''}

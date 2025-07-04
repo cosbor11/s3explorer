@@ -1,7 +1,7 @@
 // src/components/editor/RawEditor.tsx
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { useS3 } from '@/contexts/s3'
 
 const PREVIEWABLE_EXT = ['csv', 'tsv', 'md', 'markdown', 'json'] as const
@@ -22,23 +22,35 @@ export default function RawEditor({ onPreview }: Props) {
     isNewFile,
   } = useS3()
 
+  const ext = selectedFile?.name.split('.').pop()?.toLowerCase()
+  const canPreview = ext && PREVIEWABLE_EXT.includes(ext as any)
+
   const [local, setLocal] = useState(editedContent)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
 
-  /* focus when a brand-new file is opened */
+  // Focus new file
   useEffect(() => {
     if (isNewFile && textareaRef.current) textareaRef.current.focus()
   }, [isNewFile])
 
-  /* keep local buffer in sync */
+  // Sync local buffer
   useEffect(() => setLocal(editedContent), [editedContent])
 
-  /* ring colour */
-  const ring = dirty ? 'ring-1 ring-orange-400' : ''
+  // Line count based on logical lines
+  const lineCount = local.split('\n').length
 
-  /* can this file toggle back to Preview? */
-  const ext = selectedFile?.name.split('.').pop()?.toLowerCase()
-  const canPreview = ext && PREVIEWABLE_EXT.includes(ext as any)
+  // Sync gutter scroll
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop
+  }
+  useEffect(() => {
+    if (textareaRef.current && gutterRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }, [local])
+
+  const ring = dirty ? 'ring-1 ring-orange-400' : ''
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -59,10 +71,9 @@ export default function RawEditor({ onPreview }: Props) {
           <button
             disabled={!dirty}
             onClick={saveFile}
-            className={`px-2 py-0.5 border rounded text-xs ${
-              dirty
-                ? 'bg-[#313131] border-[#555] text-white hover:bg-[#3d3d3d]'
-                : 'bg-[#232323] border-[#333] text-[#777] cursor-not-allowed'
+            className={`px-2 py-0.5 border rounded text-xs \$\{dirty
+              ? 'bg-[#313131] border-[#555] text-white hover:bg-[#3d3d3d]'
+              : 'bg-[#232323] border-[#333] text-[#777] cursor-not-allowed'
             }`}
           >
             Save
@@ -76,20 +87,40 @@ export default function RawEditor({ onPreview }: Props) {
         </div>
       </div>
 
-      <textarea
-        ref={textareaRef}
-        value={local}
-        onChange={(e) => {
-          setLocal(e.target.value)
-          setEditedContent(e.target.value)
-        }}
-        spellCheck={false}
-        className={`
-          flex-1 min-h-0 resize-none bg-[#1e1e1e] p-4 text-sm text-[#d4d4d4] font-mono
-          focus:outline-none ${ring}
-          ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'}
-        `}
-      />
+      {/* editor with gutter */}
+      <div className="flex-1 flex overflow-hidden font-mono text-sm">
+        <div
+          ref={gutterRef}
+          className="select-none pr-2 text-right bg-[#1e1e1e] border-r border-[#2d2d2d] text-gray-500"
+          style={{
+            overflowY: 'auto',
+            msOverflowStyle: 'none', /* IE and Edge */
+            scrollbarWidth: 'none',  /* Firefox */
+            paddingTop: '0.5em',
+            lineHeight: '1.5em',
+            paddingRight: '8px',    /* hide scrollbar */
+            marginRight: '-8px',    /* hide scrollbar */
+          }}
+        >
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div key={i} style={{ height: '1.5em' }}>{i + 1}</div>
+          ))}
+        </div>
+
+        <textarea
+          ref={textareaRef}
+          value={local}
+          onChange={(e) => {
+            setLocal(e.target.value)
+            setEditedContent(e.target.value)
+          }}
+          spellCheck={false}
+          wrap={wrap ? 'soft' : 'off'}
+          onScroll={handleScroll}
+          className={`flex-1 min-h-0 resize-none bg-[#1e1e1e] p-4 text-sm text-[#d4d4d4] font-mono focus:outline-none ${ring} \$\{wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+          }`}
+        />
+      </div>
     </div>
   )
 }
