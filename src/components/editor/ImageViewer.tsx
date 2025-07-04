@@ -40,7 +40,7 @@ export default function ImageViewer() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-3 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
+      <div className="px-1 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
         <span className="text-gray-400">Image preview</span>
         <button
           onClick={handleClose}

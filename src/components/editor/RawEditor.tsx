@@ -148,7 +148,7 @@ export default function RawEditor({ onPreview }: Props) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* toolbar */}
-      <div className="pl-3 pr-1.5 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
+      <div className="pl-3 pr-1 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
         <span className="text-gray-400">Edit</span>
         <div className="flex items-center gap-2">
           {canPreview && (

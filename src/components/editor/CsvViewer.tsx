@@ -25,14 +25,14 @@ export default function CsvViewer({ onEdit }: Props) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-3 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
+      <div className="px-1 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
         <span className="text-gray-400">CSV preview · {rows.length} rows</span>
         <div className="flex items-center gap-1">
           <button
             onClick={onEdit}
             className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
           >
-            Edit raw
+            Edit
           </button>
           <button
             onClick={handleClose}
