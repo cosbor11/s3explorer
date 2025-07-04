@@ -10,6 +10,7 @@ import FolderSearchBar from './FolderSearchBar'
 const MIN_W = 160
 const CHAR_PX = 8
 const PADDING = 32
+const USERPREFS_KEY = 'filetreepane_prefs'
 
 const BLUE = 'text-[#3794ff]'
 const GREEN = 'text-[#4ec9b0]'
@@ -18,6 +19,21 @@ const TEXT = 'text-[#d4d4d4]'
 interface FileTreePaneProps {
   verticalMode?: boolean
   fillMode?: boolean
+}
+
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+function savePrefs(prefs: { width: number }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
 }
 
 export default function FileTreePane({ verticalMode, fillMode }: FileTreePaneProps) {
@@ -45,11 +61,21 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
   } = useS3()
 
   const api = useApi()
-  const [width, setWidth] = useState(() => {
+
+  // Restore width from localStorage
+  const [width, setWidthState] = useState(() => {
+    const prefs = loadPrefs()
+    if (prefs && typeof prefs.width === 'number') return prefs.width
     if (!tree) return 220
     const longest = Math.max(10, ...(tree ?? []).map(n => n.name.length))
     return Math.max(MIN_W, longest * CHAR_PX + PADDING)
   })
+
+  useEffect(() => {
+    savePrefs({ width })
+  }, [width])
+
+  const setWidth = (w: number) => setWidthState(w)
 
   const [inputValue, setInputValue] = useState(search)
   useEffect(() => {
@@ -205,6 +231,7 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
         onSearchKeyDown={handleSearchKeyDown}
         onSearchClick={handleSearch}
         onClearClick={handleClearSearch}
+        autoFocus={!selectedFile} // <-- only autofocus when no file is open!
       />
       <div className="overflow-auto h-full" ref={containerRef}>
         {loading && (

@@ -1,6 +1,7 @@
+// src/app/page.tsx
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useS3, S3Provider } from '@/contexts/s3'
 import { S3ConnectionProvider } from '@/contexts/S3ConnectionContext'
 import Sidebar from '@/components/Sidebar'
@@ -14,11 +15,27 @@ import InspectorPanel from '@/components/InspectorPanel'
 
 const VSCODE_BG = 'bg-[#1e1e1e]'
 const VSCODE_TEXT = 'text-[#d4d4d4]'
+const FILETREE_EDITOR_SPLIT_KEY = 'filetree_editor_split'
 
 function MainArea() {
   const { selectedFile, isNewFile, error } = useS3()
-  const [bottomPaneHeight, setBottomPaneHeight] = useState(200)
+  const [bottomPaneHeight, setBottomPaneHeight] = useState(() => {
+    // Load saved split position (height) from localStorage, else use 200
+    if (typeof window !== 'undefined') {
+      const val = localStorage.getItem(FILETREE_EDITOR_SPLIT_KEY)
+      if (val) {
+        const n = parseInt(val, 10)
+        if (!isNaN(n)) return n
+      }
+    }
+    return 200
+  })
   const dragRef = useRef<HTMLDivElement>(null)
+
+  // Persist split position (height)
+  useEffect(() => {
+    localStorage.setItem(FILETREE_EDITOR_SPLIT_KEY, String(bottomPaneHeight))
+  }, [bottomPaneHeight])
 
   // Drag logic for vertical resizing (drag up to increase height)
   const onVerticalDrag = (e: React.MouseEvent) => {

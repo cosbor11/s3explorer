@@ -1,7 +1,7 @@
-// src/components/EditorPane.tsx   (orchestrator)
+// src/components/EditorPane.tsx
 'use client'
 
-import { JSX, useState } from 'react'
+import { JSX, useState, useEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 import ImageViewer from './editor/ImageViewer'
 import CsvViewer from './editor/CsvViewer'
@@ -10,10 +10,41 @@ import RawEditor from './editor/RawEditor'
 import JSONPreview from './editor/JSONPreview'
 
 const CSV_EXT = ['csv', 'tsv']
+const USERPREFS_KEY = 'editorpane_prefs'
+
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+function savePrefs(prefs: { height: number }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
+}
 
 export default function EditorPane() {
   const { selectedFile, isNewFile } = useS3()
   const [mode, setMode] = useState<'preview' | 'raw'>('preview')
+
+  // Restore height from localStorage (for vertical split scenarios)
+  const [height, setHeight] = useState<number | undefined>(undefined)
+
+  useEffect(() => {
+    const prefs = loadPrefs()
+    if (prefs && typeof prefs.height === 'number') {
+      setHeight(prefs.height)
+    }
+  }, [])
+
+  // Save height on change
+  useEffect(() => {
+    if (height !== undefined) savePrefs({ height })
+  }, [height])
 
   if (!selectedFile && !isNewFile) return null
 
@@ -35,8 +66,35 @@ export default function EditorPane() {
     content = <RawEditor onPreview={() => setMode('preview')} />
   }
 
+  // Allow resizing (vertical split only). Example: drag handle at top
+  const startDrag = (e: React.MouseEvent) => {
+    const startY = e.clientY
+    const startH = height ?? 380
+    const move = (ev: MouseEvent) => {
+      const newH = Math.max(120, startH + (ev.clientY - startY))
+      setHeight(newH)
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div
+      className="flex-1 flex flex-col h-full relative"
+      style={height ? { height } : {}}
+    >
+      {/* Drag handle for vertical resizing */}
+      {height !== undefined && (
+        <div
+          className="absolute top-0 left-0 w-full h-2 z-10 cursor-ns-resize bg-transparent hover:bg-[#555]/60"
+          onMouseDown={startDrag}
+          style={{ transform: 'translateY(-1px)' }}
+        />
+      )}
       {content}
     </div>
   )

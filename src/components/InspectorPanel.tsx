@@ -6,6 +6,24 @@ import { useS3 } from '@/contexts/s3'
 
 const MIN_W = 250
 const COLLAPSED_W = 40
+const DEFAULT_W = 360
+const USERPREFS_KEY = 'inspector_panel_prefs'
+
+// Prefs helpers
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+function savePrefs(prefs: { width: number; visible: boolean }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
+}
 
 // Section component for collapsible sections
 const Section = ({
@@ -34,10 +52,27 @@ const Section = ({
 export default function InspectorPanel() {
   const { selectedBucket } = useS3()
 
+  // Load prefs on mount (client only)
+  const [width, setWidthState] = useState(DEFAULT_W)
+  const [visible, setVisibleState] = useState(true)
+
+  useEffect(() => {
+    const prefs = loadPrefs()
+    if (prefs) {
+      setWidthState(typeof prefs.width === 'number' ? prefs.width : DEFAULT_W)
+      setVisibleState(
+        typeof prefs.visible === 'boolean' ? prefs.visible : true
+      )
+    }
+  }, [])
+
+  // Save to localStorage
+  useEffect(() => {
+    savePrefs({ width, visible })
+  }, [width, visible])
+
   // ---- All hooks must be unconditional! ----
-  const [width, setWidth] = useState(360)
   const [collapsed, setCollapsed] = useState(false)
-  const [visible, setVisible] = useState(true)
   const prevWidth = useRef(width)
 
   const [open, setOpen] = useState({
@@ -57,12 +92,11 @@ export default function InspectorPanel() {
   // Listen for global toggle events dispatched from BreadcrumbBar
   useEffect(() => {
     const handler = () => {
-      // Completely hide/show inspector instead of collapse
-      setVisible(v => {
+      setVisibleState((v) => {
         // When becoming visible, restore previous width/collapsed state
         if (!v) {
           setCollapsed(false)
-          setWidth(Math.max(prevWidth.current, MIN_W))
+          setWidthState(Math.max(prevWidth.current, MIN_W))
         }
         return !v
       })
@@ -79,11 +113,11 @@ export default function InspectorPanel() {
   function toggleCollapsed() {
     if (collapsed) {
       setCollapsed(false)
-      setWidth(Math.max(prevWidth.current, MIN_W))
+      setWidthState(Math.max(prevWidth.current, MIN_W))
     } else {
       prevWidth.current = width
       setCollapsed(true)
-      setWidth(COLLAPSED_W)
+      setWidthState(COLLAPSED_W)
     }
   }
 
@@ -93,7 +127,7 @@ export default function InspectorPanel() {
     e.preventDefault()
     const sx = e.clientX
     const sw = width
-    const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, sw - (ev.clientX - sx)))
+    const move = (ev: MouseEvent) => setWidthState(Math.max(MIN_W, sw - (ev.clientX - sx)))
     const up = () => {
       window.removeEventListener('mousemove', move)
       window.removeEventListener('mouseup', up)

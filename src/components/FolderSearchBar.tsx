@@ -17,6 +17,7 @@ export default function FolderSearchBar({
   onSearchKeyDown,
   onSearchClick,
   onClearClick,
+  autoFocus = false, // <--- new prop!
 }: {
   search: string
   setSearch: (s: string) => void
@@ -24,6 +25,7 @@ export default function FolderSearchBar({
   onSearchKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
   onSearchClick?: () => void
   onClearClick?: () => void
+  autoFocus?: boolean
 }) {
   const {
     searchMode,
@@ -33,8 +35,10 @@ export default function FolderSearchBar({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [autoFocus])
 
   const placeholder =
     searchMode === 'begins'

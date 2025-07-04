@@ -2,7 +2,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useMemo, useState, useRef } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 
 const MIN_W = 160
@@ -10,6 +10,8 @@ const COLLAPSED_W = 42
 const CHAR_PX = 8
 const PADDING = 64
 const DEFAULT_W = 425
+
+const USERPREFS_KEY = 'sidebar_prefs'
 
 const MenuIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -34,6 +36,22 @@ const PinIcon = ({ pinned }: { pinned: boolean }) =>
     </svg>
   )
 
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+
+function savePrefs(prefs: { width: number; pinned: boolean }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
+}
+
 export default function Sidebar() {
   const {
     buckets,
@@ -44,12 +62,32 @@ export default function Sidebar() {
     createBucket,
   } = useS3()
 
-  const [width, setWidth] = useState(DEFAULT_W)
+  // Load prefs on mount (only on client)
+  const [width, setWidthState] = useState(DEFAULT_W)
+  const [pinned, setPinnedState] = useState(false)
+
+  // on mount, load settings
+  useEffect(() => {
+    const prefs = loadPrefs()
+    if (prefs) {
+      setWidthState(typeof prefs.width === 'number' ? prefs.width : DEFAULT_W)
+      setPinnedState(!!prefs.pinned)
+    }
+  }, [])
+
+  // Save prefs when changed
+  useEffect(() => {
+    savePrefs({ width, pinned })
+  }, [width, pinned])
+
   const [collapsed, setCollapsed] = useState(false)
-  const [pinned, setPinned] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const prevWidth = useRef(width)
+
+  // Use setter to ensure both state and localStorage update
+  const setWidth = (w: number) => setWidthState(w)
+  const setPinned = (p: boolean) => setPinnedState(p)
 
   // Collapse / expand
   const toggleCollapsed = () => {
@@ -210,7 +248,6 @@ export default function Sidebar() {
                         : "hover:bg-[#313131] text-white")
                     }
                   >
-                    {/* All folder icons have the same width/height */}
                     {isSelected ? (
                       <svg
                         width="16"
