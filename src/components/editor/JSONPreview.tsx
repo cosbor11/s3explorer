@@ -1,9 +1,8 @@
-// src/components/editor/JSONPreview.tsx
 'use client'
 
 import React, { useState, useEffect, useMemo, createContext, useContext } from 'react'
 import { useS3 } from '@/contexts/s3'
-import { Plus, Minus, Check, XCircle } from 'lucide-react'
+import { Plus, Minus, Check, XCircle, X } from 'lucide-react'
 
 interface JSONPreviewProps {
   onEdit: () => void
@@ -63,7 +62,7 @@ const Node: React.FC<{ n: string | null; d: any; dep?: number; last?: boolean }>
 
 /* ---------- Main ---------- */
 export default function JSONPreview({ onEdit }: JSONPreviewProps) {
-  const { editedContent } = useS3()
+  const { editedContent, currentPrefix, openPrefix } = useS3()
   let json: any = null, parseErr = ''
   try { json = JSON.parse(editedContent || '') } catch (e: any) { parseErr = e.message }
 
@@ -82,19 +81,36 @@ export default function JSONPreview({ onEdit }: JSONPreviewProps) {
     }
   }
 
+  const handleClose = () => {
+    openPrefix(currentPrefix)
+  }
+
   return (
     <ExpandCtx.Provider value={{ lvl }}>
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
         <div className="flex-1 min-w-0 overflow-auto">
           {/* Toolbar */}
           <div className="sticky top-0 z-10 bg-[#181818] border-b border-[#2d2d2d] w-full px-3 py-2 text-xs flex items-center justify-between">
-            <div className="flex items-center space-x-2"><span className="text-gray-400">JSON Preview</span>{parseErr ? <XCircle size={14} className="text-red-500 opacity-60" /> : <Check size={14} className="text-green-500 opacity-60" />}</div>
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-400">JSON Preview</span>
+              {parseErr ? <XCircle size={14} className="text-red-500 opacity-60" /> : <Check size={14} className="text-green-500 opacity-60" />}
+            </div>
             <div className="flex items-center space-x-1">
               <select value={lvl} onChange={e => setLvl(+e.target.value)} disabled={!!parseErr} className="bg-[#232323] border border-[#3a3a3a] rounded text-xs px-2 py-0.5 text-gray-200">
                 {levels.map(l => <option key={l} value={l}>{l === 0 ? 'None' : `Level ${l}`}</option>)}
               </select>
               <button onClick={() => setLvl(lvl === max ? 0 : max)} disabled={!!parseErr} className="px-2 py-0.5 bg-[#232323] border border-[#3a3a3a] rounded text-xs text-gray-200">{lvl === max ? 'Collapse All' : 'Expand All'}</button>
-              <button onClick={onEdit} className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-xs text-gray-200">Edit raw</button>
+              <button onClick={onEdit} className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-xs text-gray-200">Edit</button>
+              <button
+                onClick={handleClose}
+                className="px-1 py-0.5 bg-[#232323] cursor-pointer hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs flex items-center"
+                title="Close file"
+                aria-label="Close file"
+                tabIndex={0}
+                type="button"
+              >
+                <X className="w-3 h-4" />
+              </button>
             </div>
           </div>
 

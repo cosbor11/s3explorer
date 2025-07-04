@@ -2,13 +2,14 @@
 'use client'
 
 import { useS3 } from '@/contexts/s3'
+import { X } from 'lucide-react'
 
 interface Props {
   onEdit(): void
 }
 
 export default function CsvViewer({ onEdit }: Props) {
-  const { editedContent, selectedFile } = useS3()
+  const { editedContent, selectedFile, currentPrefix, openPrefix } = useS3()
   if (!selectedFile) return null
 
   const ext = selectedFile.name.split('.').pop()?.toLowerCase()
@@ -18,16 +19,32 @@ export default function CsvViewer({ onEdit }: Props) {
     (ext === 'tsv' ? r.split('\t') : r.split(',')),
   )
 
+  const handleClose = () => {
+    openPrefix(currentPrefix)
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-3 py-1 text-xs bg-[#181818] border-b border-[#2d2d2d] flex items-center justify-between">
         <span className="text-gray-400">CSV preview · {rows.length} rows</span>
-        <button
-          onClick={onEdit}
-          className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
-        >
-          Edit raw
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
+          >
+            Edit raw
+          </button>
+          <button
+            onClick={handleClose}
+            className="px-1 py-0.5 bg-[#232323] cursor-pointer hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs flex items-center"
+            title="Close file"
+            aria-label="Close file"
+            tabIndex={0}
+            type="button"
+          >
+            <X className="w-3 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* 👇  min-h-0 keeps this wrapper shrinkable & scrollable */}

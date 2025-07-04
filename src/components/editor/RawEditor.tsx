@@ -1,11 +1,43 @@
+// src/components/editor/RawEditor.tsx
 'use client'
 
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useLayoutEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { getVisualLines } from './editorUtil'
 import { X } from 'lucide-react'
 
 const PREVIEWABLE_EXT = ['csv', 'tsv', 'md', 'markdown', 'json'] as const
+const USERPREFS_KEY = 'file_editor_userprefs'
+const DEFAULT_FILE_PREFS = { wrap: true }
+
+function getFilePrefs(path: string): any {
+  try {
+    const all = JSON.parse(localStorage.getItem(USERPREFS_KEY) || '{}')
+    return all[path] || {}
+  } catch {
+    return {}
+  }
+}
+
+function setFilePrefs(path: string, prefs: any, defaultPrefs = DEFAULT_FILE_PREFS) {
+  try {
+    const all = JSON.parse(localStorage.getItem(USERPREFS_KEY) || '{}')
+    const merged = { ...(all[path] || {}), ...prefs }
+    // Remove keys that match the default
+    Object.keys(defaultPrefs).forEach((k) => {
+      if (merged[k] === defaultPrefs[k]) {
+        delete merged[k]
+      }
+    })
+    // Only save if there’s something non-default
+    if (Object.keys(merged).length) {
+      all[path] = merged
+    } else {
+      delete all[path]
+    }
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(all))
+  } catch {}
+}
 
 interface Props {
   onPreview(): void
@@ -15,16 +47,32 @@ export default function RawEditor({ onPreview }: Props) {
   const {
     editedContent,
     setEditedContent,
-    wrap,
-    setWrap,
     dirty,
     saveFile,
     selectedFile,
+    selectedBucket,
     isNewFile,
+    currentPrefix,
+    openPrefix,
   } = useS3()
 
   const ext = selectedFile?.name.split('.').pop()?.toLowerCase()
   const canPreview = ext && PREVIEWABLE_EXT.includes(ext as any)
+  const filePath =
+    selectedFile && selectedBucket
+      ? `${selectedBucket}/${selectedFile.fullKey}`
+      : null
+
+  const [wrap, setWrap] = useState(true)
+
+  // Load wrap from file prefs when file changes
+  useEffect(() => {
+    if (filePath) {
+      const filePrefs = getFilePrefs(filePath)
+      if (typeof filePrefs.wrap === 'boolean') setWrap(filePrefs.wrap)
+      else setWrap(DEFAULT_FILE_PREFS.wrap)
+    }
+  }, [filePath])
 
   const [local, setLocal] = useState(editedContent)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -36,13 +84,41 @@ export default function RawEditor({ onPreview }: Props) {
   useEffect(() => setLocal(editedContent), [editedContent])
 
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([])
-  useEffect(() => {
+
+  // Helper to update line counts
+  const updateVisualLineCounts = React.useCallback(() => {
     if (!wrap || !textareaRef.current) {
       setVisualLineCounts(local.split('\n').map(() => 1))
       return
     }
     setVisualLineCounts(local.split('\n').map(line => getVisualLines(line, textareaRef.current!)))
   }, [local, wrap, selectedFile, isNewFile])
+
+  // Initial and dep-based update
+  useLayoutEffect(() => {
+    updateVisualLineCounts()
+  }, [updateVisualLineCounts])
+
+  // --- Resize observer for textarea width changes (including pane resize)
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    // Only recalc on wrap mode
+    if (!wrap) return
+    let frame: number | null = null
+    const observer = new window.ResizeObserver(() => {
+      // debounce with animation frame to avoid layout thrash
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(updateVisualLineCounts)
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [wrap, updateVisualLineCounts])
+
+  // --------------------------------------------------------
 
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
     if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop
@@ -52,6 +128,18 @@ export default function RawEditor({ onPreview }: Props) {
       gutterRef.current.scrollTop = textareaRef.current.scrollTop
     }
   }, [local])
+
+  const handleClose = () => {
+    openPrefix(currentPrefix)
+  }
+
+  const handleToggleWrap = () => {
+    setWrap(w => {
+      const next = !w
+      if (filePath) setFilePrefs(filePath, { wrap: next }, DEFAULT_FILE_PREFS)
+      return next
+    })
+  }
 
   const ring = dirty ? 'ring-1 ring-orange-400' : ''
   const fontSize = '0.95rem'
@@ -82,21 +170,13 @@ export default function RawEditor({ onPreview }: Props) {
             Save
           </button>
           <button
-            onClick={() => setWrap(!wrap)}
+            onClick={handleToggleWrap}
             className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
           >
             Wrap: {wrap ? 'On' : 'Off'}
           </button>
-          {canPreview && (
-            <button
-              onClick={() => textareaRef.current?.focus()}
-              className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
-              tabIndex={-1}
-            >
-              Edit
-            </button>
-          )}
           <button
+            onClick={handleClose}
             className="px-1 py-0.5 bg-[#232323] cursor-pointer hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs flex items-center"
             title="Close file"
             aria-label="Close file"

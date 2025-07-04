@@ -1,4 +1,3 @@
-➜  s3explorer git:(main) ✗ scripts/cat-ui.sh
 
 ---------------------  src/app/layout.tsx -------------------
 import './globals.css';
@@ -36,9 +35,10 @@ export default function RootLayout({
   );
 }
 ---------------------  src/app/page.tsx -------------------
+// src/app/page.tsx
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useS3, S3Provider } from '@/contexts/s3'
 import { S3ConnectionProvider } from '@/contexts/S3ConnectionContext'
 import Sidebar from '@/components/Sidebar'
@@ -52,11 +52,27 @@ import InspectorPanel from '@/components/InspectorPanel'
 
 const VSCODE_BG = 'bg-[#1e1e1e]'
 const VSCODE_TEXT = 'text-[#d4d4d4]'
+const FILETREE_EDITOR_SPLIT_KEY = 'filetree_editor_split'
 
 function MainArea() {
   const { selectedFile, isNewFile, error } = useS3()
-  const [bottomPaneHeight, setBottomPaneHeight] = useState(200)
+  const [bottomPaneHeight, setBottomPaneHeight] = useState(() => {
+    // Load saved split position (height) from localStorage, else use 200
+    if (typeof window !== 'undefined') {
+      const val = localStorage.getItem(FILETREE_EDITOR_SPLIT_KEY)
+      if (val) {
+        const n = parseInt(val, 10)
+        if (!isNaN(n)) return n
+      }
+    }
+    return 200
+  })
   const dragRef = useRef<HTMLDivElement>(null)
+
+  // Persist split position (height)
+  useEffect(() => {
+    localStorage.setItem(FILETREE_EDITOR_SPLIT_KEY, String(bottomPaneHeight))
+  }, [bottomPaneHeight])
 
   // Drag logic for vertical resizing (drag up to increase height)
   const onVerticalDrag = (e: React.MouseEvent) => {
@@ -136,31 +152,115 @@ export default function Page() {
 'use client'
 
 import Image from 'next/image'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 
-const MIN_W = 425 
+const MIN_W = 160
+const COLLAPSED_W = 42
 const CHAR_PX = 8
 const PADDING = 64
+const DEFAULT_W = 425
+
+const USERPREFS_KEY = 'sidebar_prefs'
+
+const MenuIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+    <circle cx="5" cy="12" r="1.5" fill="#4ec9b0" />
+    <circle cx="12" cy="12" r="1.5" fill="#4ec9b0" />
+    <circle cx="19" cy="12" r="1.5" fill="#4ec9b0" />
+  </svg>
+)
+
+const PinIcon = ({ pinned }: { pinned: boolean }) =>
+  pinned ? (
+    <svg width="16" height="16" fill="none" stroke="#fbbf24" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path d="M7 7l10 10M20 6l-4 4m0 0l-6 6m6-6l-6 6" />
+      <path d="M16.24 7.76l.7-.7a2 2 0 112.83 2.83l-.7.7" />
+      <path d="M4 20l7-7" stroke="#fbbf24" />
+    </svg>
+  ) : (
+    <svg width="16" height="16" fill="none" stroke="#d4d4d4" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path d="M7 7l10 10M20 6l-4 4m0 0l-6 6m6-6l-6 6" />
+      <path d="M16.24 7.76l.7-.7a2 2 0 112.83 2.83l-.7.7" />
+      <path d="M4 20l7-7" stroke="#d4d4d4" />
+    </svg>
+  )
+
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+
+function savePrefs(prefs: { width: number; pinned: boolean }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
+}
 
 export default function Sidebar() {
   const {
     buckets,
     selectedBucket,
-    createBucket,
     selectBucket,
     openMenu,
     openPrefix,
+    createBucket,
   } = useS3()
 
-  const longest = useMemo(() => Math.max(0, ...buckets.map(b => b.length)), [buckets])
-  const [width, setWidth] = useState(Math.max(MIN_W, longest * CHAR_PX + PADDING))
+  // Load prefs on mount (only on client)
+  const [width, setWidthState] = useState(DEFAULT_W)
+  const [pinned, setPinnedState] = useState(false)
 
+  // on mount, load settings
+  useEffect(() => {
+    const prefs = loadPrefs()
+    if (prefs) {
+      setWidthState(typeof prefs.width === 'number' ? prefs.width : DEFAULT_W)
+      setPinnedState(!!prefs.pinned)
+    }
+  }, [])
+
+  // Save prefs when changed
+  useEffect(() => {
+    savePrefs({ width, pinned })
+  }, [width, pinned])
+
+  const [collapsed, setCollapsed] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuBtnRef = useRef<HTMLButtonElement>(null)
+  const prevWidth = useRef(width)
+
+  // Use setter to ensure both state and localStorage update
+  const setWidth = (w: number) => setWidthState(w)
+  const setPinned = (p: boolean) => setPinnedState(p)
+
+  // Collapse / expand
+  const toggleCollapsed = () => {
+    if (collapsed) {
+      setCollapsed(false)
+      setWidth(Math.max(prevWidth.current, MIN_W))
+    } else {
+      prevWidth.current = width
+      setCollapsed(true)
+      setWidth(COLLAPSED_W)
+    }
+  }
+
+  // Pin toggle
+  const togglePinned = () => setPinned(p => !p)
+
+  // Drag-resize
   const startDrag = (e: React.MouseEvent) => {
+    if (collapsed) return
     e.preventDefault()
-    const sx = e.clientX
-    const sw = width
-    const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, sw + (ev.clientX - sx)))
+    const startX = e.clientX
+    const startW = width
+    const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, startW + (ev.clientX - startX)))
     const up = () => {
       window.removeEventListener('mousemove', move)
       window.removeEventListener('mouseup', up)
@@ -169,106 +269,185 @@ export default function Sidebar() {
     window.addEventListener('mouseup', up)
   }
 
-  // --- Add this handler for sidebar context menu
+  // Context-menu on empty sidebar
   const onSidebarContextMenu = (e: React.MouseEvent) => {
-    // Prevent context if right-click is on a bucket button
-    if (
-      (e.target as HTMLElement).closest('button[data-bucket]')
-    ) return
+    if ((e.target as HTMLElement).closest('button[data-bucket]')) return
     e.preventDefault()
     openMenu(e, 'emptySidebar')
+  }
+
+  // Arrow Icon
+  const Arrow = ({ dir }: { dir: 'left' | 'right' }) => (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      stroke="#d4d4d4"
+      strokeWidth={2}
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="pointer-events-none"
+    >
+      {dir === 'left'
+        ? <polyline points="15 18 9 12 15 6" />
+        : <polyline points="9 18 15 12 9 6" />}
+    </svg>
+  )
+
+  // Close menu on outside click
+  if (typeof window !== 'undefined') {
+    window.onclick = (e) => {
+      if (menuOpen && menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
   }
 
   return (
     <div
       className="relative flex flex-col border-r border-[#2d2d2d] bg-[#252526] select-none"
-      style={{ width, minWidth: MIN_W }}
+      style={{ width, minWidth: collapsed ? COLLAPSED_W : MIN_W }}
       onContextMenu={onSidebarContextMenu}
     >
-      {/* header */}
-      <div className="px-3 py-2 border-b border-[#2d2d2d] flex justify-between items-center overflow-visible">
-        <div className="p-[1px]">
-          <Image
-            src="/img/s3-explorer-logo.png"
-            alt="S3 Explorer"
-            width={110}
-            height={22}
-            priority
-          />
-        </div>
-        <button
-          aria-label="Create bucket"
-          className="w-7 h-7 flex items-center justify-center rounded bg-[#303030] hover:bg-[#444] border border-[#555] transition-colors"
-          onClick={createBucket}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="#4ec9b0" strokeWidth="1.5" />
-            <defs>
-              <linearGradient id="gradPlus" x1="0" y1="0" x2="24" y2="24">
-                <stop offset="0%" stopColor="#3794ff" />
-                <stop offset="100%" stopColor="#4ec9b0" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M12 7v10M7 12h10"
-              stroke="url(#gradPlus)"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-      </div>
+      {/* Collapse / expand toggle (always visible, h-7) */}
+      <button
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={toggleCollapsed}
+        className="absolute top-2 -right-3 z-10 w-6 h-7 rounded bg-[#232323] hover:bg-[#333] border border-[#333] flex items-center justify-center"
+      >
+        {collapsed ? <Arrow dir="right" /> : <Arrow dir="left" />}
+      </button>
 
-      {/* bucket list */}
-      <ul className="px-2 py-2 overflow-auto grow">
-        {buckets.map(b => (
-          <li
-            key={b}
-            onContextMenu={e => {
-              // right-click: just open context menu, DO NOT select
-              openMenu(e, 'bucket', undefined, b)
-            }}
+      {/* Menu button (top right) with a small right margin (only when not collapsed) */}
+      {!collapsed && (
+        <div className="absolute top-2 right-5 z-20">
+          <button
+            ref={menuBtnRef}
+            aria-label="Sidebar options"
+            onClick={() => setMenuOpen(open => !open)}
+            className="w-7 h-7 flex items-center justify-center rounded border border-[#333] bg-[#232323] hover:bg-[#333] transition-colors"
           >
-            <button data-bucket
-              className={`w-full text-left px-2 py-1 rounded transition-colors duration-75 select-none flex items-center
-                ${
-                  selectedBucket === b
-                    ? 'bg-[#252a30]/80 font-semibold text-[#cdd6f4] shadow-[inset_2px_0_0_0_#313c4e]'
-                    : 'hover:bg-[#313131] text-white'
-                }`}
-              style={{
-                ...(selectedBucket === b
-                  ? {
-                      // Optional: lighter font, and a subtle dot
-                      fontWeight: 500,
+            <MenuIcon />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 mt-1 w-32 bg-[#232323] border border-[#333] rounded shadow-xl py-1 z-40">
+              <button
+                className="flex items-center w-full px-3 py-2 text-sm text-left hover:bg-[#444] transition-colors"
+                onClick={() => {
+                  setMenuOpen(false)
+                  togglePinned()
+                }}
+              >
+                <PinIcon pinned={pinned} />
+                <span className="ml-3">{pinned ? "Unpin" : "Pin"}</span>
+              </button>
+              <button
+                className="flex items-center w-full px-3 py-2 text-sm text-left hover:bg-[#444] transition-colors"
+                onClick={() => {
+                  setMenuOpen(false)
+                  createBucket()
+                }}
+              >
+                <span className="text-[#4ec9b0] text-lg font-bold mr-3">+</span>
+                Bucket
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MAIN CONTENT (hidden when collapsed) */}
+      {!collapsed && (
+        <>
+          {/* Logo only */}
+          <div className="px-3 py-2 border-b border-[#2d2d2d] flex items-center overflow-visible">
+            <Image
+              src="/img/s3-explorer-logo.png"
+              alt="S3 Explorer"
+              width={110}
+              height={22}
+              priority
+            />
+          </div>
+
+          {/* Bucket list */}
+          <ul className="px-2 py-2 overflow-auto grow">
+            {buckets.map((b) => {
+              const isSelected = selectedBucket === b
+              return (
+                <li key={b} onContextMenu={(e) => openMenu(e, 'bucket', undefined, b)}>
+                  <button
+                    data-bucket
+                    onClick={() => {
+                      if (isSelected) {
+                        openPrefix('')
+                      } else {
+                        selectBucket(b)
+                        if (!pinned) {
+                          prevWidth.current = width
+                          setCollapsed(true)
+                          setWidth(COLLAPSED_W)
+                        }
+                      }
+                    }}
+                    className={
+                      "w-full px-2 py-1 rounded flex items-center transition-colors text-sm " +
+                      (isSelected
+                        ? "bg-[#252a30]/80 font-semibold text-[#cdd6f4]"
+                        : "hover:bg-[#313131] text-white")
                     }
-                  : {}),
-              }}
-              onClick={() => {
-                if (selectedBucket === b) {
-                  /* bucket already active → just reload its root prefix */
-                  openPrefix('')
-                } else {
-                  /* switch buckets */
-                  selectBucket(b)
-                }
-              }}
-            >
-              {selectedBucket === b ? (
-                <span className="inline-block w-2 h-2 mr-2 rounded-full bg-[#4ec9b0] opacity-70" />
-              ) : (
-                <span className="inline-block w-2 h-2 mr-2" />
-              )}
-              {b}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {/* drag handle */}
-      <div
-        className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
-        onMouseDown={startDrag}
-      />
+                  >
+                    {isSelected ? (
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="#4ec9b0"
+                        className="mr-1 flex-shrink-0"
+                      >
+                        <path
+                          d="M3 4a2 2 0 012-2h4l2 2h8a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V4z"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className="mr-1 flex-shrink-0"
+                      >
+                        <path
+                          d="M3 4a2 2 0 012-2h4l2 2h10a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V4z"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                        />
+                      </svg>
+                    )}
+                    <span className="truncate">{b}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </>
+      )}
+
+      {/* Drag-handle (switches between resize & click mode) */}
+      {collapsed ? (
+        <div
+          className="absolute top-0 right-0 h-full w-2 cursor-pointer hover:bg-[#555]/60"
+          onClick={toggleCollapsed}
+        />
+      ) : (
+        <div
+          className="absolute top-0 right-0 h-full w-2 cursor-ew-resize hover:bg-[#555]/60"
+          onMouseDown={startDrag}
+        />
+      )}
     </div>
   )
 }
@@ -277,6 +456,7 @@ export default function Sidebar() {
 // src/components/BreadcrumbBar.tsx
 'use client'
 
+import { useState, useEffect } from 'react'
 import Tooltip from '@/components/Tooltip'
 import { useS3 } from '@/contexts/s3'
 import S3ConnectionDropdown from './S3ConnectionDropdown'
@@ -285,6 +465,26 @@ const VSCODE_BORDER = 'border-[#2d2d2d]'
 const linkCls =
   'text-[#3794ff] cursor-pointer hover:underline hover:text-[#75b5ff] transition-colors'
 const Slash = () => <span className="mx-[2px] select-none text-[#555]">/</span>
+
+/* ------------------------------------------------------------------ */
+/* Split-window icon used to toggle InspectorPanel                    */
+/* ------------------------------------------------------------------ */
+const SplitIcon = () => (
+  <svg
+    width={14}
+    height={14}
+    viewBox="0 0 24 24"
+    stroke="#d4d4d4"
+    strokeWidth={1.8}
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="pointer-events-none"
+  >
+    <rect x="3" y="3" width="18" height="18" rx="1.5" />
+    <line x1="12" y1="3" x2="12" y2="21" />
+  </svg>
+)
 
 export default function BreadcrumbBar() {
   const {
@@ -313,12 +513,28 @@ export default function BreadcrumbBar() {
     refreshCurrent()
   }
 
+  // Inspector visibility state (to control Show/Hide tooltip label)
+  const [inspectorVisible, setInspectorVisible] = useState(true)
+
+  useEffect(() => {
+    const handleToggle = () => setInspectorVisible((v) => !v)
+    window.addEventListener('toggleInspectorPanel', handleToggle)
+    return () => window.removeEventListener('toggleInspectorPanel', handleToggle)
+  }, [])
+
+  /* ------------------------------------------------------------------ */
+  /* Toggle InspectorPanel                                              */
+  /* ------------------------------------------------------------------ */
+  const toggleInspector = () => {
+    window.dispatchEvent(new CustomEvent('toggleInspectorPanel'))
+  }
+
   return (
     <div
-      className={`h-12 border-b ${VSCODE_BORDER} px-6 flex items-center justify-between bg-[#232323] text-sm`}
+      className={`h-12 border-b ${VSCODE_BORDER} px-3 flex items-center justify-between bg-[#232323] text-sm`}
     >
       {/* path */}
-      <div className="flex items-center flex-wrap">
+      <div className="flex items-center flex-wrap ml-2">
         <button className={`${linkCls} font-semibold`} onClick={() => selectBucket(null)}>
           s3://
         </button>
@@ -358,9 +574,9 @@ export default function BreadcrumbBar() {
       </div>
 
       {/* right-side actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center relative">
         {/* refresh */}
-        <Tooltip label="Refresh">
+        <Tooltip label="Refresh" placement="bottom">
           <button
             onClick={onRefresh}
             className="px-2 py-1 rounded border border-[#333] bg-[#232323] hover:bg-[#333] transition-colors flex items-center"
@@ -376,6 +592,19 @@ export default function BreadcrumbBar() {
 
         {/* s3 connection dropdown */}
         <S3ConnectionDropdown />
+
+        {/* toggle InspectorPanel: only visible when a bucket is selected */}
+        {selectedBucket && (
+          <Tooltip label={inspectorVisible ? 'Hide inspector' : 'Show inspector'} placement="bottom-right">
+            <button
+              onClick={toggleInspector}
+              className="px-2 py-1 rounded border border-[#333] bg-[#232323] hover:bg-[#333] transition-colors flex items-center"
+              style={{ marginLeft: 0, position: 'relative', zIndex: 10 }}
+            >
+              <SplitIcon />
+            </button>
+          </Tooltip>
+        )}
       </div>
     </div>
   )
@@ -394,6 +623,7 @@ import FolderSearchBar from './FolderSearchBar'
 const MIN_W = 160
 const CHAR_PX = 8
 const PADDING = 32
+const USERPREFS_KEY = 'filetreepane_prefs'
 
 const BLUE = 'text-[#3794ff]'
 const GREEN = 'text-[#4ec9b0]'
@@ -402,6 +632,21 @@ const TEXT = 'text-[#d4d4d4]'
 interface FileTreePaneProps {
   verticalMode?: boolean
   fillMode?: boolean
+}
+
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+function savePrefs(prefs: { width: number }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
 }
 
 export default function FileTreePane({ verticalMode, fillMode }: FileTreePaneProps) {
@@ -429,11 +674,21 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
   } = useS3()
 
   const api = useApi()
-  const [width, setWidth] = useState(() => {
+
+  // Restore width from localStorage
+  const [width, setWidthState] = useState(() => {
+    const prefs = loadPrefs()
+    if (prefs && typeof prefs.width === 'number') return prefs.width
     if (!tree) return 220
     const longest = Math.max(10, ...(tree ?? []).map(n => n.name.length))
     return Math.max(MIN_W, longest * CHAR_PX + PADDING)
   })
+
+  useEffect(() => {
+    savePrefs({ width })
+  }, [width])
+
+  const setWidth = (w: number) => setWidthState(w)
 
   const [inputValue, setInputValue] = useState(search)
   useEffect(() => {
@@ -589,6 +844,7 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
         onSearchKeyDown={handleSearchKeyDown}
         onSearchClick={handleSearch}
         onClearClick={handleClearSearch}
+        autoFocus={!selectedFile} // <-- only autofocus when no file is open!
       />
       <div className="overflow-auto h-full" ref={containerRef}>
         {loading && (
@@ -707,11 +963,31 @@ export default function FileTreePane({ verticalMode, fillMode }: FileTreePanePro
 // src/components/InspectorPanel.tsx
 'use client'
 
-import { useState, Suspense, lazy } from 'react'
+import { useState, useRef, Suspense, lazy, useEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 
 const MIN_W = 250
+const COLLAPSED_W = 40
+const DEFAULT_W = 360
+const USERPREFS_KEY = 'inspector_panel_prefs'
 
+// Prefs helpers
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+function savePrefs(prefs: { width: number; visible: boolean }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
+}
+
+// Section component for collapsible sections
 const Section = ({
   title,
   children,
@@ -737,7 +1013,30 @@ const Section = ({
 
 export default function InspectorPanel() {
   const { selectedBucket } = useS3()
-  const [width, setWidth] = useState(360)
+
+  // Load prefs on mount (client only)
+  const [width, setWidthState] = useState(DEFAULT_W)
+  const [visible, setVisibleState] = useState(true)
+
+  useEffect(() => {
+    const prefs = loadPrefs()
+    if (prefs) {
+      setWidthState(typeof prefs.width === 'number' ? prefs.width : DEFAULT_W)
+      setVisibleState(
+        typeof prefs.visible === 'boolean' ? prefs.visible : true
+      )
+    }
+  }, [])
+
+  // Save to localStorage
+  useEffect(() => {
+    savePrefs({ width, visible })
+  }, [width, visible])
+
+  // ---- All hooks must be unconditional! ----
+  const [collapsed, setCollapsed] = useState(false)
+  const prevWidth = useRef(width)
+
   const [open, setOpen] = useState({
     details: false,
     permissions: false,
@@ -752,11 +1051,45 @@ export default function InspectorPanel() {
   const LazyPolicy = lazy(() => import('@/components/inspector/PolicySection'))
   const LazyCORS = lazy(() => import('@/components/inspector/CORSSection'))
 
-  const startDrag = (e: React.MouseEvent) => {
+  // Listen for global toggle events dispatched from BreadcrumbBar
+  useEffect(() => {
+    const handler = () => {
+      setVisibleState((v) => {
+        // When becoming visible, restore previous width/collapsed state
+        if (!v) {
+          setCollapsed(false)
+          setWidthState(Math.max(prevWidth.current, MIN_W))
+        }
+        return !v
+      })
+    }
+    window.addEventListener('toggleInspectorPanel', handler)
+    return () => window.removeEventListener('toggleInspectorPanel', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // --- Early return, but after all hooks ---
+  if (!selectedBucket || !visible) return null
+
+  // Collapse/expand panel (not used when fully hidden, but preserved for future use)
+  function toggleCollapsed() {
+    if (collapsed) {
+      setCollapsed(false)
+      setWidthState(Math.max(prevWidth.current, MIN_W))
+    } else {
+      prevWidth.current = width
+      setCollapsed(true)
+      setWidthState(COLLAPSED_W)
+    }
+  }
+
+  // Drag to resize panel
+  function startDrag(e: React.MouseEvent) {
+    if (collapsed) return // disable drag when collapsed
     e.preventDefault()
     const sx = e.clientX
     const sw = width
-    const move = (ev: MouseEvent) => setWidth(Math.max(MIN_W, sw - (ev.clientX - sx)))
+    const move = (ev: MouseEvent) => setWidthState(Math.max(MIN_W, sw - (ev.clientX - sx)))
     const up = () => {
       window.removeEventListener('mousemove', move)
       window.removeEventListener('mouseup', up)
@@ -765,73 +1098,78 @@ export default function InspectorPanel() {
     window.addEventListener('mouseup', up)
   }
 
-  if (!selectedBucket) return null
-
   return (
     <div
-      className="relative border-l border-[#2d2d2d] bg-[#1e1e1e] overflow-auto select-none"
-      style={{ width, minWidth: MIN_W }}
+      className="relative border-l border-[#2d2d2d] bg-[#1e1e1e] overflow-y-auto overflow-x-visible select-none"
+      style={{ width, minWidth: collapsed ? COLLAPSED_W : MIN_W }}
     >
-      <Section
-        title="Details"
-        open={open.details}
-        onToggle={() => setOpen(o => ({ ...o, details: !o.details }))}
-      >
-        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
-          {open.details && <LazyDetails />}
-        </Suspense>
-      </Section>
-      <Section
-        title="Access Control List (ACL)"
-        open={open.permissions}
-        onToggle={() => setOpen(o => ({ ...o, permissions: !o.permissions }))}
-      >
-        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
-          {open.permissions && <LazyACL />}
-        </Suspense>
-      </Section>
-      <Section
-        title="Tags"
-        open={open.tags}
-        onToggle={() => setOpen(o => ({ ...o, tags: !o.tags }))}
-      >
-        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
-          {open.tags && <LazyTags />}
-        </Suspense>
-      </Section>
-      <Section
-        title="Bucket Policy"
-        open={open.policy}
-        onToggle={() => setOpen(o => ({ ...o, policy: !o.policy }))}
-      >
-        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
-          {open.policy && <LazyPolicy />}
-        </Suspense>
-      </Section>
-      <Section
-        title="CORS"
-        open={open.cors}
-        onToggle={() => setOpen(o => ({ ...o, cors: !o.cors }))}
-      >
-        <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
-          {open.cors && <LazyCORS />}
-        </Suspense>
-      </Section>
+      {/* Collapsible content */}
+      {!collapsed && (
+        <div>
+          <Section
+            title="Details"
+            open={open.details}
+            onToggle={() => setOpen((o) => ({ ...o, details: !o.details }))}
+          >
+            <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+              {open.details && <LazyDetails />}
+            </Suspense>
+          </Section>
+          <Section
+            title="Access Control List (ACL)"
+            open={open.permissions}
+            onToggle={() => setOpen((o) => ({ ...o, permissions: !o.permissions }))}
+          >
+            <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+              {open.permissions && <LazyACL />}
+            </Suspense>
+          </Section>
+          <Section
+            title="Tags"
+            open={open.tags}
+            onToggle={() => setOpen((o) => ({ ...o, tags: !o.tags }))}
+          >
+            <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+              {open.tags && <LazyTags />}
+            </Suspense>
+          </Section>
+          <Section
+            title="Bucket Policy"
+            open={open.policy}
+            onToggle={() => setOpen((o) => ({ ...o, policy: !o.policy }))}
+          >
+            <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+              {open.policy && <LazyPolicy />}
+            </Suspense>
+          </Section>
+          <Section
+            title="CORS"
+            open={open.cors}
+            onToggle={() => setOpen((o) => ({ ...o, cors: !o.cors }))}
+          >
+            <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+              {open.cors && <LazyCORS />}
+            </Suspense>
+          </Section>
+        </div>
+      )}
 
-      {/* drag handle */}
-      <div
-        className="absolute top-0 left-0 h-full w-2 cursor-ew-resize bg-transparent hover:bg-[#555]/60"
-        onMouseDown={startDrag}
-      />
+      {/* Drag / click handle – stays on very edge */}
+      {!collapsed && (
+        <div
+          className="absolute top-0 left-0 h-full w-2 cursor-ew-resize hover:bg-[#555]/60"
+          onMouseDown={startDrag}
+        />
+      )}
     </div>
   )
 }
 
 ---------------------  src/components/EditorPane.tsx -------------------
-// src/components/EditorPane.tsx   (orchestrator)
+// src/components/EditorPane.tsx
 'use client'
 
-import { JSX, useState } from 'react'
+import { JSX, useState, useEffect } from 'react'
 import { useS3 } from '@/contexts/s3'
 import ImageViewer from './editor/ImageViewer'
 import CsvViewer from './editor/CsvViewer'
@@ -840,10 +1178,41 @@ import RawEditor from './editor/RawEditor'
 import JSONPreview from './editor/JSONPreview'
 
 const CSV_EXT = ['csv', 'tsv']
+const USERPREFS_KEY = 'editorpane_prefs'
+
+function loadPrefs() {
+  try {
+    const data = localStorage.getItem(USERPREFS_KEY)
+    if (!data) return null
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}
+function savePrefs(prefs: { height: number }) {
+  try {
+    localStorage.setItem(USERPREFS_KEY, JSON.stringify(prefs))
+  } catch {}
+}
 
 export default function EditorPane() {
   const { selectedFile, isNewFile } = useS3()
   const [mode, setMode] = useState<'preview' | 'raw'>('preview')
+
+  // Restore height from localStorage (for vertical split scenarios)
+  const [height, setHeight] = useState<number | undefined>(undefined)
+
+  useEffect(() => {
+    const prefs = loadPrefs()
+    if (prefs && typeof prefs.height === 'number') {
+      setHeight(prefs.height)
+    }
+  }, [])
+
+  // Save height on change
+  useEffect(() => {
+    if (height !== undefined) savePrefs({ height })
+  }, [height])
 
   if (!selectedFile && !isNewFile) return null
 
@@ -865,8 +1234,35 @@ export default function EditorPane() {
     content = <RawEditor onPreview={() => setMode('preview')} />
   }
 
+  // Allow resizing (vertical split only). Example: drag handle at top
+  const startDrag = (e: React.MouseEvent) => {
+    const startY = e.clientY
+    const startH = height ?? 380
+    const move = (ev: MouseEvent) => {
+      const newH = Math.max(120, startH + (ev.clientY - startY))
+      setHeight(newH)
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div
+      className="flex-1 flex flex-col h-full relative"
+      style={height ? { height } : {}}
+    >
+      {/* Drag handle for vertical resizing */}
+      {height !== undefined && (
+        <div
+          className="absolute top-0 left-0 w-full h-2 z-10 cursor-ns-resize bg-transparent hover:bg-[#555]/60"
+          onMouseDown={startDrag}
+          style={{ transform: 'translateY(-1px)' }}
+        />
+      )}
       {content}
     </div>
   )
@@ -893,7 +1289,7 @@ export default function S3ConnectionDropdown() {
   return (
     <>
       <Tooltip label="Select S3 connection">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mx-2">
           <select
             className="bg-[#232323] border border-[#333] text-sm text-white px-2 py-1 rounded cursor-pointer hover:bg-[#2a2a2a]"
             value={selected?.id ?? ''}
@@ -925,4 +1321,3 @@ export default function S3ConnectionDropdown() {
     </>
   )
 }
-➜  s3explorer git:(main) ✗ 
