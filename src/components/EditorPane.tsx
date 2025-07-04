@@ -8,6 +8,7 @@ import CsvViewer from './editor/CsvViewer'
 import TextPreview from './editor/TextPreview'
 import RawEditor from './editor/RawEditor'
 import JSONPreview from './editor/JSONPreview'
+import PDFPreview from './editor/PDFPreview' // <-- Add this line
 
 const CSV_EXT = ['csv', 'tsv']
 const USERPREFS_KEY = 'editorpane_prefs'
@@ -56,6 +57,8 @@ export default function EditorPane() {
     content = <TextPreview onEdit={() => setMode('raw')} />
   } else if (!isNewFile && ext === 'json' && mode === 'preview') {
     content = <JSONPreview onEdit={() => setMode('raw')} />
+  } else if (!isNewFile && ext === 'pdf' && mode === 'preview') { // <--- PDF support
+    content = <PDFPreview />
   } else if (
     !isNewFile &&
     ext &&
