@@ -23,7 +23,7 @@ const TextPreview: React.FC<Props> = ({ onEdit }) => {
           <div className="flex items-center gap-1">
             <button
               onClick={onEdit}
-              className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
+              className="px-2 py-0.5 bg-[#232323] cursor-pointer hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
             >
               Edit
             </button>
@@ -53,7 +53,7 @@ const TextPreview: React.FC<Props> = ({ onEdit }) => {
         <div className="flex items-center gap-1">
           <button
             onClick={onEdit}
-            className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
+            className="px-2 py-0.5 bg-[#232323] cursor-pointer hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
           >
             Edit
           </button>

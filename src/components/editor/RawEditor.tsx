@@ -1,27 +1,20 @@
-// src/components/editor/RawEditor.tsx
 'use client'
 
-import React, {
-  useRef,
-  useEffect,
-  useState,
-  useLayoutEffect,
-  useCallback,
-} from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { useS3 } from '@/contexts/s3'
 import { getVisualLines } from './editorUtil'
 import { X } from 'lucide-react'
 
 const PREVIEWABLE_EXT = ['csv', 'tsv', 'md', 'markdown', 'json'] as const
-const USERPREFS_KEY = 'file_editor_userprefs'
+const USERPREFS_KEY  = 'file_editor_userprefs'
 const DEFAULT_FILE_PREFS = { wrap: true }
 
 console.log('RawEditor module loaded')
 
-/* ------------------------------------------------------------------ */
-/* local-storage helpers                                              */
-/* ------------------------------------------------------------------ */
-function getFilePrefs(path: string): any {
+/* ----------------------------------------------------------- */
+/* local-storage helpers                                       */
+/* ----------------------------------------------------------- */
+function getFilePrefs(path: string) {
   try {
     const all = JSON.parse(localStorage.getItem(USERPREFS_KEY) || '{}')
     return all[path] || {}
@@ -29,35 +22,26 @@ function getFilePrefs(path: string): any {
     return {}
   }
 }
-function setFilePrefs(
-  path: string,
-  prefs: any,
-  defaults = DEFAULT_FILE_PREFS,
-) {
+function setFilePrefs(path: string, prefs: any) {
   try {
+    const def = DEFAULT_FILE_PREFS
     const all = JSON.parse(localStorage.getItem(USERPREFS_KEY) || '{}')
     const merged = { ...(all[path] || {}), ...prefs }
-    Object.keys(defaults).forEach((k) => {
-      if (merged[k] === defaults[k]) delete merged[k]
-    })
+    Object.keys(def).forEach((k) => merged[k] === def[k] && delete merged[k])
     if (Object.keys(merged).length) all[path] = merged
     else delete all[path]
     localStorage.setItem(USERPREFS_KEY, JSON.stringify(all))
   } catch {}
 }
 
-/* ------------------------------------------------------------------ */
-/* component props                                                    */
-/* ------------------------------------------------------------------ */
+/* ----------------------------------------------------------- */
+/* component                                                   */
+/* ----------------------------------------------------------- */
 interface Props {
   onPreview(): void
-  /** called once the editor has mounted so the parent can hide mask */
   onReady?(): void
 }
 
-/* ------------------------------------------------------------------ */
-/* component                                                          */
-/* ------------------------------------------------------------------ */
 export default function RawEditor({ onPreview, onReady }: Props) {
   console.log('RawEditor component initializing')
   const {
@@ -79,66 +63,82 @@ export default function RawEditor({ onPreview, onReady }: Props) {
       ? `${selectedBucket}/${selectedFile.fullKey}`
       : null
 
-  /* ----------------------------------------------------------------*/
-  /* user prefs                                                       */
-  /* ----------------------------------------------------------------*/
+  /* user prefs ------------------------------------------------ */
   const [wrap, setWrap] = useState(true)
   useEffect(() => {
     if (filePath) {
-      const filePrefs = getFilePrefs(filePath)
-      if (typeof filePrefs.wrap === 'boolean') setWrap(filePrefs.wrap)
-      else setWrap(DEFAULT_FILE_PREFS.wrap)
+      const prefs = getFilePrefs(filePath)
+      setWrap(
+        typeof prefs.wrap === 'boolean' ? prefs.wrap : DEFAULT_FILE_PREFS.wrap,
+      )
     }
   }, [filePath])
 
-  /* ----------------------------------------------------------------*/
-  /* local editing buffer                                             */
-  /* ----------------------------------------------------------------*/
+  /* editing buffer ------------------------------------------- */
   const [local, setLocal] = useState(editedContent)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const gutterRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const gutterRef   = useRef<HTMLDivElement  | null>(null)
 
   useEffect(() => {
     if (textareaRef.current) textareaRef.current.focus()
   }, [selectedFile, isNewFile])
+
   useEffect(() => setLocal(editedContent), [editedContent])
 
-  /* ----------------------------------------------------------------*/
-  /* line-number gutter logic                                         */
-  /* ----------------------------------------------------------------*/
+  /* visual line counts – chunked via idle callback ----------- */
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([])
-  const updateVisualLineCounts = useCallback(() => {
+
+  const measureLines = useCallback(() => {
     if (!wrap || !textareaRef.current) {
       setVisualLineCounts(local.split('\n').map(() => 1))
       return
     }
-    setVisualLineCounts(
-      local.split('\n').map((l) => getVisualLines(l, textareaRef.current!)),
-    )
-  }, [local, wrap])
-  useLayoutEffect(updateVisualLineCounts, [updateVisualLineCounts])
 
-  /* ----------------------------------------------------------------*/
-  /* recalc line-wrap on textarea resize                              */
-  /* ----------------------------------------------------------------*/
+    const lines  = local.split('\n')
+    const counts = new Array(lines.length).fill(1)
+    let idx = 0
+
+    const slice = (deadline: IdleDeadline | null) => {
+      const start = performance.now()
+      while (
+        idx < lines.length &&
+        (deadline ? deadline.timeRemaining() > 2 : performance.now() - start < 6)
+      ) {
+        counts[idx] = getVisualLines(lines[idx], textareaRef.current!)
+        idx++
+      }
+      if (idx < lines.length) {
+        (window.requestIdleCallback || setTimeout)(slice)
+      } else {
+        setVisualLineCounts(counts)
+      }
+    }
+
+    slice(null) // start immediately (first slice)
+  }, [local, wrap])
+
+  /* first measure after paint */
+  useEffect(() => {
+    requestAnimationFrame(measureLines)
+  }, [measureLines])
+
+  /* re-measure on textarea resize */
   useEffect(() => {
     const el = textareaRef.current
     if (!el || !wrap) return
     let frame: number | null = null
-    const observer = new ResizeObserver(() => {
-      if (frame !== null) cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(updateVisualLineCounts)
+    const obs = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measureLines)
     })
-    observer.observe(el)
+    obs.observe(el)
     return () => {
-      observer.disconnect()
-      if (frame !== null) cancelAnimationFrame(frame)
+      obs.disconnect()
+      frame && cancelAnimationFrame(frame)
     }
-  }, [wrap, updateVisualLineCounts])
+  }, [wrap, measureLines])
 
-  /* ----------------------------------------------------------------*/
-  /* event handlers                                                   */
-  /* ----------------------------------------------------------------*/
+  /* scroll sync ---------------------------------------------- */
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
     if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop
   }
@@ -148,26 +148,17 @@ export default function RawEditor({ onPreview, onReady }: Props) {
     }
   }, [local])
 
+  /* helpers --------------------------------------------------- */
   const handleClose = () => openPrefix(currentPrefix)
-
   const handleToggleWrap = () => {
     setWrap((w) => {
       const next = !w
-      if (filePath) setFilePrefs(filePath, { wrap: next })
+      filePath && setFilePrefs(filePath, { wrap: next })
       return next
     })
   }
 
-  /* ----------------------------------------------------------------*/
-  /* styling constants                                                */
-  /* ----------------------------------------------------------------*/
-  const ring = dirty ? 'ring-1 ring-orange-400' : ''
-  const fontSize = '0.95rem'
-  const lineHeight = '1.5em'
-
-  /* ----------------------------------------------------------------*/
-  /* signal parent that we are ready                                  */
-  /* ----------------------------------------------------------------*/
+  /* ready signal --------------------------------------------- */
   useEffect(() => {
     console.log('RawEditor ready')
     console.timeEnd('switchToRaw')
@@ -175,9 +166,11 @@ export default function RawEditor({ onPreview, onReady }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* ----------------------------------------------------------------*/
-  /* render                                                           */
-  /* ----------------------------------------------------------------*/
+  /* render ---------------------------------------------------- */
+  const ring       = dirty ? 'ring-1 ring-orange-400' : ''
+  const fontSize   = '0.95rem'
+  const lineHeight = '1.5em'
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* toolbar */}
@@ -211,10 +204,8 @@ export default function RawEditor({ onPreview, onReady }: Props) {
           </button>
           <button
             onClick={handleClose}
-            className="px-1 py-0.5 bg-[#232323] cursor-pointer hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs flex items-center"
-            title="Close file"
+            className="px-1 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs flex items-center"
             aria-label="Close file"
-            tabIndex={0}
             type="button"
           >
             <X className="w-3 h-4" />
@@ -222,9 +213,9 @@ export default function RawEditor({ onPreview, onReady }: Props) {
         </div>
       </div>
 
-      {/* editor with gutter */}
+      {/* editor area */}
       <div className="flex-1 flex overflow-hidden font-mono text-sm">
-        {/* line numbers */}
+        {/* gutter */}
         <div
           ref={gutterRef}
           className="select-none text-right bg-[#1e1e1e] border-r border-[#2d2d2d] text-gray-500"
@@ -244,7 +235,7 @@ export default function RawEditor({ onPreview, onReady }: Props) {
             <div
               key={i}
               style={{
-                height: `calc(${lineHeight} * ${visualLineCounts[i] || 1})`,
+                height: `calc(${lineHeight} * ${(visualLineCounts[i] || 1)})`,
                 fontSize,
                 display: 'flex',
                 alignItems: 'flex-start',
@@ -255,7 +246,7 @@ export default function RawEditor({ onPreview, onReady }: Props) {
           ))}
         </div>
 
-        {/* editable textarea */}
+        {/* textarea */}
         <textarea
           ref={textareaRef}
           value={local}
