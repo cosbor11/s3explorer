@@ -1,7 +1,13 @@
 // src/components/editor/RawEditor.tsx
 'use client'
 
-import React, { useRef, useEffect, useState, useLayoutEffect } from 'react'
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useLayoutEffect,
+  useCallback,
+} from 'react'
 import { useS3 } from '@/contexts/s3'
 import { getVisualLines } from './editorUtil'
 import { X } from 'lucide-react'
@@ -10,6 +16,11 @@ const PREVIEWABLE_EXT = ['csv', 'tsv', 'md', 'markdown', 'json'] as const
 const USERPREFS_KEY = 'file_editor_userprefs'
 const DEFAULT_FILE_PREFS = { wrap: true }
 
+console.log('RawEditor module loaded')
+
+/* ------------------------------------------------------------------ */
+/* local-storage helpers                                              */
+/* ------------------------------------------------------------------ */
 function getFilePrefs(path: string): any {
   try {
     const all = JSON.parse(localStorage.getItem(USERPREFS_KEY) || '{}')
@@ -18,32 +29,37 @@ function getFilePrefs(path: string): any {
     return {}
   }
 }
-
-function setFilePrefs(path: string, prefs: any, defaultPrefs = DEFAULT_FILE_PREFS) {
+function setFilePrefs(
+  path: string,
+  prefs: any,
+  defaults = DEFAULT_FILE_PREFS,
+) {
   try {
     const all = JSON.parse(localStorage.getItem(USERPREFS_KEY) || '{}')
     const merged = { ...(all[path] || {}), ...prefs }
-    // Remove keys that match the default
-    Object.keys(defaultPrefs).forEach((k) => {
-      if (merged[k] === defaultPrefs[k]) {
-        delete merged[k]
-      }
+    Object.keys(defaults).forEach((k) => {
+      if (merged[k] === defaults[k]) delete merged[k]
     })
-    // Only save if there’s something non-default
-    if (Object.keys(merged).length) {
-      all[path] = merged
-    } else {
-      delete all[path]
-    }
+    if (Object.keys(merged).length) all[path] = merged
+    else delete all[path]
     localStorage.setItem(USERPREFS_KEY, JSON.stringify(all))
   } catch {}
 }
 
+/* ------------------------------------------------------------------ */
+/* component props                                                    */
+/* ------------------------------------------------------------------ */
 interface Props {
   onPreview(): void
+  /** called once the editor has mounted so the parent can hide mask */
+  onReady?(): void
 }
 
-export default function RawEditor({ onPreview }: Props) {
+/* ------------------------------------------------------------------ */
+/* component                                                          */
+/* ------------------------------------------------------------------ */
+export default function RawEditor({ onPreview, onReady }: Props) {
+  console.log('RawEditor component initializing')
   const {
     editedContent,
     setEditedContent,
@@ -63,9 +79,10 @@ export default function RawEditor({ onPreview }: Props) {
       ? `${selectedBucket}/${selectedFile.fullKey}`
       : null
 
+  /* ----------------------------------------------------------------*/
+  /* user prefs                                                       */
+  /* ----------------------------------------------------------------*/
   const [wrap, setWrap] = useState(true)
-
-  // Load wrap from file prefs when file changes
   useEffect(() => {
     if (filePath) {
       const filePrefs = getFilePrefs(filePath)
@@ -74,6 +91,9 @@ export default function RawEditor({ onPreview }: Props) {
     }
   }, [filePath])
 
+  /* ----------------------------------------------------------------*/
+  /* local editing buffer                                             */
+  /* ----------------------------------------------------------------*/
   const [local, setLocal] = useState(editedContent)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
@@ -83,31 +103,29 @@ export default function RawEditor({ onPreview }: Props) {
   }, [selectedFile, isNewFile])
   useEffect(() => setLocal(editedContent), [editedContent])
 
+  /* ----------------------------------------------------------------*/
+  /* line-number gutter logic                                         */
+  /* ----------------------------------------------------------------*/
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([])
-
-  // Helper to update line counts
-  const updateVisualLineCounts = React.useCallback(() => {
+  const updateVisualLineCounts = useCallback(() => {
     if (!wrap || !textareaRef.current) {
       setVisualLineCounts(local.split('\n').map(() => 1))
       return
     }
-    setVisualLineCounts(local.split('\n').map(line => getVisualLines(line, textareaRef.current!)))
-  }, [local, wrap, selectedFile, isNewFile])
+    setVisualLineCounts(
+      local.split('\n').map((l) => getVisualLines(l, textareaRef.current!)),
+    )
+  }, [local, wrap])
+  useLayoutEffect(updateVisualLineCounts, [updateVisualLineCounts])
 
-  // Initial and dep-based update
-  useLayoutEffect(() => {
-    updateVisualLineCounts()
-  }, [updateVisualLineCounts])
-
-  // --- Resize observer for textarea width changes (including pane resize)
+  /* ----------------------------------------------------------------*/
+  /* recalc line-wrap on textarea resize                              */
+  /* ----------------------------------------------------------------*/
   useEffect(() => {
     const el = textareaRef.current
-    if (!el) return
-    // Only recalc on wrap mode
-    if (!wrap) return
+    if (!el || !wrap) return
     let frame: number | null = null
-    const observer = new window.ResizeObserver(() => {
-      // debounce with animation frame to avoid layout thrash
+    const observer = new ResizeObserver(() => {
       if (frame !== null) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(updateVisualLineCounts)
     })
@@ -118,8 +136,9 @@ export default function RawEditor({ onPreview }: Props) {
     }
   }, [wrap, updateVisualLineCounts])
 
-  // --------------------------------------------------------
-
+  /* ----------------------------------------------------------------*/
+  /* event handlers                                                   */
+  /* ----------------------------------------------------------------*/
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
     if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop
   }
@@ -129,22 +148,36 @@ export default function RawEditor({ onPreview }: Props) {
     }
   }, [local])
 
-  const handleClose = () => {
-    openPrefix(currentPrefix)
-  }
+  const handleClose = () => openPrefix(currentPrefix)
 
   const handleToggleWrap = () => {
-    setWrap(w => {
+    setWrap((w) => {
       const next = !w
-      if (filePath) setFilePrefs(filePath, { wrap: next }, DEFAULT_FILE_PREFS)
+      if (filePath) setFilePrefs(filePath, { wrap: next })
       return next
     })
   }
 
+  /* ----------------------------------------------------------------*/
+  /* styling constants                                                */
+  /* ----------------------------------------------------------------*/
   const ring = dirty ? 'ring-1 ring-orange-400' : ''
   const fontSize = '0.95rem'
   const lineHeight = '1.5em'
 
+  /* ----------------------------------------------------------------*/
+  /* signal parent that we are ready                                  */
+  /* ----------------------------------------------------------------*/
+  useEffect(() => {
+    console.log('RawEditor ready')
+    console.timeEnd('switchToRaw')
+    onReady?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* ----------------------------------------------------------------*/
+  /* render                                                           */
+  /* ----------------------------------------------------------------*/
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* toolbar */}
@@ -154,7 +187,7 @@ export default function RawEditor({ onPreview }: Props) {
           {canPreview && (
             <button
               onClick={onPreview}
-              className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
+              className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs cursor-pointer"
             >
               Preview
             </button>
@@ -162,16 +195,17 @@ export default function RawEditor({ onPreview }: Props) {
           <button
             disabled={!dirty}
             onClick={saveFile}
-            className={`px-2 py-0.5 border rounded text-xs ${dirty
-                ? 'bg-[#313131] border-[#555] text-white hover:bg-[#3d3d3d]'
+            className={`px-2 py-0.5 border rounded text-xs ${
+              dirty
+                ? 'bg-[#313131] border-[#555] text-white hover:bg-[#3d3d3d] cursor-pointer'
                 : 'bg-[#232323] border-[#333] text-[#777] cursor-not-allowed'
-              }`}
+            }`}
           >
             Save
           </button>
           <button
             onClick={handleToggleWrap}
-            className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs"
+            className="px-2 py-0.5 bg-[#232323] hover:bg-[#2e2e2e] border border-[#3a3a3a] rounded text-gray-200 text-xs cursor-pointer"
           >
             Wrap: {wrap ? 'On' : 'Off'}
           </button>
@@ -187,8 +221,10 @@ export default function RawEditor({ onPreview }: Props) {
           </button>
         </div>
       </div>
+
       {/* editor with gutter */}
       <div className="flex-1 flex overflow-hidden font-mono text-sm">
+        {/* line numbers */}
         <div
           ref={gutterRef}
           className="select-none text-right bg-[#1e1e1e] border-r border-[#2d2d2d] text-gray-500"
@@ -219,6 +255,7 @@ export default function RawEditor({ onPreview }: Props) {
           ))}
         </div>
 
+        {/* editable textarea */}
         <textarea
           ref={textareaRef}
           value={local}
@@ -229,8 +266,9 @@ export default function RawEditor({ onPreview }: Props) {
           spellCheck={false}
           wrap={wrap ? 'soft' : 'off'}
           onScroll={handleScroll}
-          className={`flex-1 min-h-0 resize-none bg-[#1e1e1e] text-[#d4d4d4] font-mono focus:outline-none ${ring} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
-            }`}
+          className={`flex-1 min-h-0 resize-none bg-[#1e1e1e] text-[#d4d4d4] font-mono focus:outline-none ${ring} ${
+            wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+          }`}
           style={{
             fontSize,
             lineHeight,
